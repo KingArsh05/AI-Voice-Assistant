@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Menu, Sun, Moon, Phone, ChevronDown, Circle } from "lucide-react";
-import { useTheme } from "../context/Themecontext";
+import { useTheme } from "../context/ThemeContext";
 
 import { checkHealth } from "../services/api";
 
