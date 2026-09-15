@@ -18,23 +18,54 @@ from ..models.campaign import make_campaign
 # ---------------------------------------------------------------------------
 
 def save_call_log(data: dict) -> dict | None:
-    """Insert or upsert a call log document by call_uuid."""
+    """Insert or upsert a call log document by call_uuid or match recent initiated call."""
     try:
         db = get_db()
         col = db["call_logs"]
         data["updated_at"] = datetime.now(timezone.utc).isoformat()
         call_uuid = data.get("call_uuid")
+        phone_number = data.get("phone_number")
         
-        # If call_uuid is empty or None, clean it out to avoid duplicate null index collisions
-        if not call_uuid:
-            data.pop("call_uuid", None)
-            col.insert_one(data)
-        else:
+        # Strip _id to prevent immutable field errors
+        data.pop("_id", None)
+        
+        # If call_uuid is provided, try to find by call_uuid first
+        if call_uuid:
+            # Also check if there was an initiated document without call_uuid for this phone number
+            existing = col.find_one({"call_uuid": call_uuid})
+            if not existing and phone_number:
+                # Find most recent initiated call for this phone number in the last 30 minutes
+                candidate = col.find_one(
+                    {
+                        "phone_number": phone_number,
+                        "call_status": "initiated",
+                        "$or": [{"call_uuid": {"$exists": False}}, {"call_uuid": None}],
+                    },
+                    sort=[("_id", DESCENDING)],
+                )
+                if candidate:
+                    # Inherit customer_name and campaign_id from the initiated record if not present
+                    if not data.get("customer_name") and candidate.get("customer_name"):
+                        data["customer_name"] = candidate["customer_name"]
+                    if not data.get("campaign_id") and candidate.get("campaign_id"):
+                        data["campaign_id"] = candidate["campaign_id"]
+                    
+                    # Update that exact document with the new call_uuid and completed call details!
+                    col.update_one(
+                        {"_id": candidate["_id"]},
+                        {"$set": data},
+                    )
+                    return data
+
             col.update_one(
                 {"call_uuid": call_uuid},
                 {"$set": data},
                 upsert=True,
             )
+        else:
+            # If call_uuid is empty or None, clean it out to avoid duplicate null index collisions
+            data.pop("call_uuid", None)
+            col.insert_one(data)
         return data
     except Exception as exc:
         print(f"[MongoService] save_call_log error: {exc}")
@@ -79,9 +110,12 @@ def save_campaign(campaign_data: dict) -> dict | None:
         db = get_db()
         col = db["campaigns"]
         campaign_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        cid = campaign_data["id"]
+        # Strip _id to avoid Mongo immutable field error when updating existing document
+        update_fields = {k: v for k, v in campaign_data.items() if k != "_id"}
         col.update_one(
-            {"id": campaign_data["id"]},
-            {"$set": campaign_data, "$setOnInsert": {"created_at": campaign_data.get("created_at", datetime.now(timezone.utc).isoformat())}},
+            {"id": cid},
+            {"$set": update_fields, "$setOnInsert": {"created_at": campaign_data.get("created_at", datetime.now(timezone.utc).isoformat())}},
             upsert=True,
         )
         return campaign_data

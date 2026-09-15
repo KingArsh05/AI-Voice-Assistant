@@ -20,6 +20,7 @@ def make_call_log(
     human_followup_needed=None,
     summary=None,
     transcription=None,
+    recording_url=None,
     raw_event_payload=None,
     timestamp=None,
 ):
@@ -44,6 +45,7 @@ def make_call_log(
         "human_followup_needed": human_followup_needed,
         "summary": summary or "",
         "transcription": transcription if transcription is not None else "",
+        "recording_url": recording_url or "",
         "raw_event_payload": raw_event_payload,
         "timestamp": timestamp or now,
         "created_at": now,

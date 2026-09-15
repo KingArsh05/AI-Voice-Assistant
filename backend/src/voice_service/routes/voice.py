@@ -50,9 +50,19 @@ def outbound_call():
             customer_name=customer_name,
         )
 
+        # Extract UUID from result (Plivo Agent Flow / Voice API responses may use different keys)
+        extracted_uuid = (
+            result.get("call_uuid")
+            or result.get("request_uuid")
+            or result.get("call_id")
+            or result.get("api_id")
+            or (result.get("data") or {}).get("call_uuid")
+            or (result.get("data") or {}).get("request_uuid")
+        )
+
         # Persist initiation record to MongoDB
         log = make_call_log(
-            call_uuid=result.get("call_uuid") or result.get("request_uuid"),
+            call_uuid=extracted_uuid,
             customer_name=customer_name,
             phone_number=to_number,
             direction="outbound",
@@ -149,6 +159,30 @@ def recording_event():
 
     timestamp = datetime.now(timezone.utc).isoformat()
 
+    # Extract recording URL directly from event_data / event / payload
+    recording_url = (
+        event_data.get("recording_url")
+        or event.get("recording_url")
+        or payload.get("data", {}).get("object", {}).get("recording_url")
+        or ""
+    )
+
+    # Format transcription cleanly if it is an array of messages
+    transcription = ""
+    if isinstance(transcription_raw, list):
+        turns = []
+        for item in transcription_raw:
+            if isinstance(item, dict):
+                speaker = item.get("role") or item.get("speaker") or "Speaker"
+                content = item.get("content") or item.get("text") or item.get("message") or ""
+                if content:
+                    turns.append(f"{speaker.capitalize()}: {content}")
+            elif isinstance(item, str) and item.strip():
+                turns.append(item.strip())
+        transcription = "\n".join(turns)
+    elif isinstance(transcription_raw, str):
+        transcription = transcription_raw.strip()
+
     # ---- Save to MongoDB (primary store) ----
     log = make_call_log(
         call_uuid=call_uuid,
@@ -169,7 +203,8 @@ def recording_event():
         verbatim_reason=verbatim_reason,
         human_followup_needed=human_followup_needed,
         summary=summary,
-        transcription=transcription_raw,
+        transcription=transcription,
+        recording_url=recording_url,
         raw_event_payload=payload,
         timestamp=timestamp,
     )
@@ -346,6 +381,8 @@ def get_campaign(campaign_id):
     campaign = mongo_service.get_campaign(campaign_id) or CAMPAIGNS.get(campaign_id)
     if not campaign:
         return jsonify({"error": "Campaign not found"}), 404
+    if "_id" in campaign and not isinstance(campaign["_id"], str):
+        campaign["_id"] = str(campaign["_id"])
     return jsonify(campaign), 200
 
 
@@ -360,25 +397,48 @@ def create_campaign():
     data.setdefault("landmark", "")
     data.setdefault("is_active", True)
 
+    # Sanitize _id to avoid Mongo immutable field errors
+    data.pop("_id", None)
+
     saved = mongo_service.save_campaign(data)
     if saved:
+        if "_id" in saved and not isinstance(saved["_id"], str):
+            saved["_id"] = str(saved["_id"])
+        CAMPAIGNS[data["id"]] = saved
         return jsonify(saved), 201
-    return jsonify({"error": "Failed to save campaign"}), 500
+
+    # Fallback to in-memory storage if MongoDB is temporarily down
+    CAMPAIGNS[data["id"]] = data
+    return jsonify(data), 201
 
 
 @voice_bp.put("/api/v1/voice/campaigns/<campaign_id>")
 def update_campaign(campaign_id):
-    """Update campaign configuration, instructions, and forwarding number in MongoDB."""
+    """Update campaign configuration, instructions, and forwarding number in MongoDB and memory."""
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Request body must be JSON"}), 400
 
+    # Strip Mongo internal _id to prevent immutable field update errors
+    data.pop("_id", None)
+
     existing = mongo_service.get_campaign(campaign_id) or CAMPAIGNS.get(campaign_id) or {}
+    if "_id" in existing:
+        existing.pop("_id", None)
+
     updated = {**existing, **data, "id": campaign_id}
     saved = mongo_service.save_campaign(updated)
+    
+    # Always keep in-memory cache synchronized so AI service uses latest prompt & config immediately
+    CAMPAIGNS[campaign_id] = updated
+
     if saved:
+        if "_id" in saved and not isinstance(saved["_id"], str):
+            saved["_id"] = str(saved["_id"])
         return jsonify(saved), 200
-    return jsonify({"error": "Failed to update campaign"}), 500
+
+    # Even if Mongo had an issue, the in-memory update succeeded for live calls
+    return jsonify(updated), 200
 
 
 # ---------------------------------------------------------------------------
