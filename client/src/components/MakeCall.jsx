@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useForm, FormProvider } from "react-hook-form";
 import {
   InputField,
@@ -6,9 +6,11 @@ import {
   TextareaField,
   PhoneInputField,
 } from "./common/FormControl";
-import { PhoneCall, Bot } from "lucide-react";
+import { PhoneCall, Bot, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 
 export default function MakeCall() {
+  const [callStatus, setCallStatus] = useState({ state: "idle", message: "" });
+
   const methods = useForm({
     defaultValues: {
       username: "",
@@ -21,7 +23,9 @@ export default function MakeCall() {
     },
   });
 
-  const onSubmit = (data) => {
+  const onSubmit = async (data) => {
+    setCallStatus({ state: "loading", message: "Triggering Plivo CX Voice Agent..." });
+
     const payload = {
       username: data.username,
       from_number: `${data.from_country_code}${data.from_phone_number}`,
@@ -30,17 +34,38 @@ export default function MakeCall() {
       prompt: data.custom_prompt,
     };
 
-    const backendUrl = import.meta.env.VITE_API_URL;
+    const backendUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-    fetch(`${backendUrl}/api/v1/voice/call`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    try {
+      const response = await fetch(`${backendUrl}/api/v1/voice/call`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const resData = await response.json();
+
+      if (response.ok && resData.success) {
+        setCallStatus({
+          state: "success",
+          message: `Call successfully dispatched! Trigger ID: ${resData.data?.trigger_id || "Active"}`,
+        });
+      } else {
+        setCallStatus({
+          state: "error",
+          message: resData.message || "Failed to trigger voice agent.",
+        });
+      }
+    } catch (err) {
+      setCallStatus({
+        state: "error",
+        message: err.message || "Network error communicating with backend server.",
+      });
+    }
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-4 sm:p-6 font-sans">
+    <div className="flex-1 p-6 sm:p-8 flex items-center justify-center relative overflow-y-auto">
       <div className="absolute top-10 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="w-full max-w-xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-xl rounded-3xl p-6 sm:p-8 shadow-2xl relative z-10">
@@ -106,12 +131,45 @@ export default function MakeCall() {
               helperText="Instructions passed to the AI voice model during the call"
             />
 
+            {callStatus.state !== "idle" && (
+              <div
+                className={`p-3.5 rounded-xl border flex items-start gap-2.5 text-xs transition-all ${
+                  callStatus.state === "loading"
+                    ? "bg-indigo-950/40 border-indigo-500/30 text-indigo-300"
+                    : callStatus.state === "success"
+                    ? "bg-emerald-950/40 border-emerald-500/30 text-emerald-300"
+                    : "bg-rose-950/40 border-rose-500/30 text-rose-300"
+                }`}
+              >
+                {callStatus.state === "loading" && (
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0 text-indigo-400 mt-0.5" />
+                )}
+                {callStatus.state === "success" && (
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+                )}
+                {callStatus.state === "error" && (
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                )}
+                <span className="leading-relaxed">{callStatus.message}</span>
+              </div>
+            )}
+
             <button
               type="submit"
-              className="w-full mt-2 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] text-white font-medium text-sm transition-all duration-200 shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 cursor-pointer"
+              disabled={callStatus.state === "loading"}
+              className="w-full mt-2 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] disabled:opacity-60 disabled:pointer-events-none text-white font-medium text-sm transition-all duration-200 shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 cursor-pointer"
             >
-              <PhoneCall className="w-4 h-4" />
-              <span>Initiate AI Call</span>
+              {callStatus.state === "loading" ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Initiating Outbound Flow...</span>
+                </>
+              ) : (
+                <>
+                  <PhoneCall className="w-4 h-4" />
+                  <span>Initiate AI Call</span>
+                </>
+              )}
             </button>
           </form>
         </FormProvider>
