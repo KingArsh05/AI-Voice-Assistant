@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 class Config:
     ENV = os.getenv("FLASK_ENV", "development")
     DEBUG = os.getenv("FLASK_DEBUG", "True").lower() in ("true", "1", "yes")
@@ -19,8 +20,7 @@ class Config:
     PLIVO_OUTBOUND_API_URL = os.getenv("PLIVO_OUTBOUND_API_URL")
 
     WS_URL = os.getenv("WS_URL")
-    PUBLIC_SERVER_URL = os.getenv("PUBLIC_SERVER_URL")
-
+    SERVER_URL = os.getenv("SERVER_URL")
 
     @classmethod
     def validate(cls):
@@ -37,6 +37,9 @@ class Config:
         ]
         missing = [key for key in required if not getattr(cls, key)]
         if missing:
-            sys.exit(f"❌ Configuration Error: Missing required env vars: {', '.join(missing)}")
+            sys.exit(
+                f"❌ Configuration Error: Missing required env vars: {', '.join(missing)}"
+            )
+
 
 Config.validate()
