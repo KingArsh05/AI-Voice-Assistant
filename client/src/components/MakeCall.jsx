@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useForm, FormProvider } from "react-hook-form";
 import {
   InputField,
@@ -6,10 +6,14 @@ import {
   TextareaField,
   PhoneInputField,
 } from "./common/FormControl";
-import { PhoneCall, Bot, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { PhoneCall, Bot, Loader2, CheckCircle2, AlertCircle, Building2, Sparkles } from "lucide-react";
 
 export default function MakeCall() {
   const [callStatus, setCallStatus] = useState({ state: "idle", message: "" });
+  const [hotels, setHotels] = useState([]);
+  const [isLoadingHotels, setIsLoadingHotels] = useState(false);
+
+  const backendUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
   const methods = useForm({
     defaultValues: {
@@ -18,10 +22,32 @@ export default function MakeCall() {
       from_phone_number: "8031825752",
       to_country_code: "+91",
       to_phone_number: "",
-      ai_persona: "support",
+      hotel_id: "",
+      ai_persona: "concierge",
       custom_prompt: "You are a helpful customer concierge representing StayChat.",
     },
   });
+
+  const selectedHotelId = methods.watch("hotel_id");
+  const selectedHotel = hotels.find((h) => h.hotel_id === selectedHotelId);
+
+  useEffect(() => {
+    const fetchHotels = async () => {
+      setIsLoadingHotels(true);
+      try {
+        const res = await fetch(`${backendUrl}/api/v1/hotels?active_only=true`);
+        const data = await res.json();
+        if (data.success) {
+          setHotels(data.data || []);
+        }
+      } catch (err) {
+        console.error("Error loading hotels:", err);
+      } finally {
+        setIsLoadingHotels(false);
+      }
+    };
+    fetchHotels();
+  }, [backendUrl]);
 
   const onSubmit = async (data) => {
     setCallStatus({ state: "loading", message: "Triggering Plivo CX Voice Agent..." });
@@ -32,9 +58,8 @@ export default function MakeCall() {
       to_number: `${data.to_country_code}${data.to_phone_number}`,
       persona: data.ai_persona,
       prompt: data.custom_prompt,
+      hotel_id: data.hotel_id || null,
     };
-
-    const backendUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
     try {
       const response = await fetch(`${backendUrl}/api/v1/voice/call`, {
@@ -116,12 +141,55 @@ export default function MakeCall() {
               label="AI Assistant Persona"
               placeholder=""
               options={[
+                { value: "concierge", label: "Hotel / Booking Concierge" },
                 { value: "support", label: "Customer Support Agent" },
                 { value: "sales", label: "Lead Qualification & Sales" },
-                { value: "concierge", label: "Hotel / Booking Concierge" },
                 { value: "feedback", label: "Post-Stay Feedback Collector" },
               ]}
             />
+
+            {/* Hotel Knowledge Base Selector */}
+            <div className="space-y-2">
+              <SelectField
+                name="hotel_id"
+                label="Hotel Knowledge Base (Optional)"
+                placeholder="-- None / Generic Call --"
+                options={[
+                  { value: "", label: "No Hotel (Generic AI Assistant)" },
+                  ...hotels.map((h) => ({
+                    value: h.hotel_id,
+                    label: `${h.name} (${h.contact?.city || "India"} - ${"★".repeat(h.star_rating || 4)})`,
+                  })),
+                ]}
+              />
+
+              {/* Selected Hotel Knowledge Preview */}
+              {selectedHotel && (
+                <div className="p-3 bg-indigo-950/30 border border-indigo-500/20 rounded-xl text-xs space-y-1.5 animate-in fade-in">
+                  <div className="flex items-center justify-between font-semibold text-indigo-300">
+                    <span className="flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-indigo-400" />
+                      {selectedHotel.name}
+                    </span>
+                    <span className="text-[10px] text-amber-400 font-mono">
+                      {"★".repeat(selectedHotel.star_rating || 4)} {selectedHotel.property_type}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    {selectedHotel.room_types?.length || 0} Room Categories • Check-in: {selectedHotel.policies?.check_in_time || "14:00"} • Check-out: {selectedHotel.policies?.check_out_time || "12:00"}
+                  </p>
+                  {selectedHotel.inventory_notes && (
+                    <p className="text-[10px] text-amber-300/90 font-medium bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
+                      ⚡ Live Note: {selectedHotel.inventory_notes}
+                    </p>
+                  )}
+                  <p className="text-[10px] text-indigo-400/80 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" />
+                    Full property amenities, dining, and rates will be compiled into this call's AI system prompt.
+                  </p>
+                </div>
+              )}
+            </div>
 
             <TextareaField
               name="custom_prompt"

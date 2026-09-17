@@ -9,6 +9,7 @@ class InitiateCallRequest(BaseModel):
     to_number: str = Field(..., pattern=r"^\+[1-9]\d{7,14}$")
     persona: str = Field(default="support")
     prompt: Optional[str] = Field(default="")
+    hotel_id: Optional[str] = Field(default=None, description="Selected Hotel ID for dynamic AI prompt injection")
 
 
 class CallRecord(BaseModel):

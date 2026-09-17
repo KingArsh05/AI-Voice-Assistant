@@ -93,30 +93,19 @@ export default function CallLogs() {
     setTimeout(() => setCopiedField(null), 2000);
   };
 
-  // Senior Developer Status Handler:
-  // Evaluates both status and telephony signals (duration, termination, raw flags)
+  // Call Status Badge — Layered Signal Resolution
+  // Priority 1: raw_plivo_hangup_cause (definitive — set by backend from live Plivo webhook)
+  // Priority 2: DB status (derived by hangup state machine)
+  // Priority 3: termination.source heuristic for legacy records that lack raw Plivo fields
   const renderCallStatusBadge = (call) => {
-    const rawStatus = (call?.status || "").toLowerCase();
-    const callStatus = (
-      call?.call_status ||
-      call?.raw_hangup_data?.data?.object?.event_data?.["Outbound Call.call_status"] ||
-      ""
-    ).toLowerCase();
-    const duration = Number(call?.duration ?? call?.termination?.duration_seconds ?? 0);
-    const termSource = (call?.termination?.source || call?.hangup_source || "").toLowerCase();
-    const termReason = (call?.termination?.reason || call?.hangup_cause || "").toLowerCase();
+    const rawStatus = (call?.status || "").toLowerCase().trim();
+    const termSource = (call?.termination?.source || call?.hangup_source || "").toLowerCase().trim();
+    const rawPlivoCause = (call?.raw_plivo_hangup_cause || "").toUpperCase().trim();
 
-    // 1. Zero Duration Calls (Never Picked Up)
-    if (duration === 0) {
-      // Case A: User explicitly declined/cut the call while ringing (Carrier returns busy/user_busy/rejected)
-      if (
-        rawStatus === "busy" ||
-        callStatus === "busy" ||
-        termReason === "busy" ||
-        termReason === "user-rejected" ||
-        termReason === "call-rejected" ||
-        rawStatus === "rejected"
-      ) {
+    // --- Priority 1: Raw Plivo HangupCause (only present for calls after the backend fix) ---
+    if (rawPlivoCause) {
+      // User pressed decline / carrier busy signal
+      if (rawPlivoCause === "CALL_REJECTED" || rawPlivoCause === "USER_BUSY") {
         return (
           <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/25">
             <PhoneOff className="w-3 h-3" />
@@ -124,9 +113,27 @@ export default function CallLogs() {
           </span>
         );
       }
-
-      // Case B: Telephony/Carrier Error
-      if (rawStatus === "failed") {
+      // Rang until Plivo flow timed out — nobody picked up
+      if (rawPlivoCause === "NO_ANSWER" || rawPlivoCause === "TIMEOUT") {
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-slate-500/10 text-slate-300 border border-slate-500/25">
+            <PhoneOff className="w-3 h-3" />
+            Unanswered (Rang Out)
+          </span>
+        );
+      }
+      // Normal call end after conversation
+      if (rawPlivoCause === "NORMAL_CLEARING") {
+        const endedByAgent = termSource === "agent";
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <CheckCircle2 className="w-3 h-3" />
+            {endedByAgent ? "Ended by Agent" : "Completed"}
+          </span>
+        );
+      }
+      // Carrier/network failure
+      if (rawPlivoCause.includes("ERROR") || rawPlivoCause.includes("FAILED") || rawPlivoCause === "RECOVERY_ON_TIMER_EXPIRE") {
         return (
           <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
             <XCircle className="w-3 h-3" />
@@ -134,8 +141,51 @@ export default function CallLogs() {
           </span>
         );
       }
+    }
 
-      // Case C: Phone rang until timeout (Nobody answered or touched the phone)
+    // --- Priority 2: DB status (set by hangup state machine) ---
+    // 1. Completed Call
+    if (rawStatus === "completed") {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          <CheckCircle2 className="w-3 h-3" />
+          {termSource === "agent" ? "Ended by Agent" : "Completed"}
+        </span>
+      );
+    }
+
+    // 2. Declined / Rejected by User
+    if (rawStatus === "rejected") {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/25">
+          <PhoneOff className="w-3 h-3" />
+          Call Declined by User
+        </span>
+      );
+    }
+
+    // 3. Busy Line
+    if (rawStatus === "busy") {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/25">
+          <PhoneOff className="w-3 h-3" />
+          Line Busy
+        </span>
+      );
+    }
+
+    // 4. No-answer: use termination.source as heuristic for legacy records
+    // "customer" source = user declined (Plivo sometimes routes quick hangs here)
+    // "agent" source = Plivo flow timed out = rang out without pickup
+    if (rawStatus === "no-answer") {
+      if (termSource === "customer") {
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/25">
+            <PhoneOff className="w-3 h-3" />
+            Call Declined by User
+          </span>
+        );
+      }
       return (
         <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-slate-500/10 text-slate-300 border border-slate-500/25">
           <PhoneOff className="w-3 h-3" />
@@ -144,43 +194,17 @@ export default function CallLogs() {
       );
     }
 
-    // 4. Completed conversation (duration > 0)
-    if (rawStatus === "completed" || duration > 0) {
-      if (termSource === "customer" || termSource === "user") {
-        return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/25">
-            <PhoneOff className="w-3 h-3" />
-            Hanged Up by User
-          </span>
-        );
-      }
-      if (termSource === "agent") {
-        return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
-            <CheckCircle2 className="w-3 h-3" />
-            Ended by Agent
-          </span>
-        );
-      }
-      return (
-        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-          <CheckCircle2 className="w-3 h-3" />
-          Completed
-        </span>
-      );
-    }
-
-    // 5. Failed
+    // 5. Telephony / Carrier Failure
     if (rawStatus === "failed") {
       return (
         <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
           <XCircle className="w-3 h-3" />
-          Failed
+          Call Failed
         </span>
       );
     }
 
-    // 6. In-Progress or Initiated
+    // 6. Initiated / In-Progress
     return (
       <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
         <AlertCircle className="w-3 h-3 animate-pulse" />
@@ -275,9 +299,16 @@ export default function CallLogs() {
                             </span>
                           )}
                         </h4>
-                        <p className="text-[11px] text-slate-400 font-mono">
-                          {call.to_number}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-[11px] text-slate-400 font-mono">
+                            {call.to_number}
+                          </p>
+                          {call.hotel?.name && (
+                            <span className="text-[10px] text-indigo-400/90 font-medium truncate max-w-[120px]">
+                              • {call.hotel.name}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     {renderCallStatusBadge(call)}
@@ -330,6 +361,11 @@ export default function CallLogs() {
                     </div>
                     <h3 className="text-lg font-bold text-white flex items-center gap-2">
                       {selectedCall.username || "Guest Customer"}
+                      {selectedCall.hotel?.name && (
+                        <span className="text-[11px] font-normal px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 flex items-center gap-1">
+                          🏨 {selectedCall.hotel.name} {"★".repeat(selectedCall.hotel.star_rating || 4)}
+                        </span>
+                      )}
                     </h3>
                     <p className="text-xs text-slate-400 mt-0.5">
                       Destination:{" "}
@@ -344,7 +380,7 @@ export default function CallLogs() {
                   <div className="text-right">
                     {renderCallStatusBadge(selectedCall)}
                     <p className="text-[11px] text-slate-400 mt-1 font-mono">
-                      Call Duration: {selectedCall.duration ? `${selectedCall.duration}s` : "0s"}
+                      Call Duration: {selectedCall.duration || selectedCall.termination?.duration_seconds || selectedCall.recording?.duration_seconds || selectedCall.recording_duration ? `${selectedCall.duration || selectedCall.termination?.duration_seconds || selectedCall.recording?.duration_seconds || selectedCall.recording_duration}s` : "0s"}
                     </p>
                   </div>
                 </div>
@@ -422,17 +458,19 @@ export default function CallLogs() {
                     </span>
                     <span className="text-[10px] text-slate-400 capitalize">
                       Termination:{" "}
-                      {Number(selectedCall.duration || 0) === 0
-                        ? (
-                            selectedCall.status === "busy" ||
-                            selectedCall.call_status === "busy" ||
-                            selectedCall.termination?.reason === "busy" ||
-                            selectedCall.termination?.reason === "user-rejected" ||
-                            selectedCall.status === "rejected"
-                              ? "Declined by User"
-                              : "Unanswered (Rang Out)"
-                          )
-                        : (selectedCall.termination?.source || selectedCall.hangup_source || "system")}
+                      {(() => {
+                        const rawCause = (selectedCall.raw_plivo_hangup_cause || "").toUpperCase();
+                        const st = (selectedCall.status || "").toLowerCase();
+                        const src = (selectedCall.termination?.source || selectedCall.hangup_source || "").toLowerCase();
+                        if (rawCause === "CALL_REJECTED" || rawCause === "USER_BUSY") return "Declined by User";
+                        if (rawCause === "NO_ANSWER" || rawCause === "TIMEOUT") return "Unanswered (Rang Out)";
+                        if (rawCause === "NORMAL_CLEARING") return src === "agent" ? "Ended by Agent" : "Normal Clearing";
+                        if (st === "rejected") return "Declined by User";
+                        if (st === "busy") return "Line Busy";
+                        if (st === "no-answer") return src === "customer" ? "Declined by User" : "Unanswered (Rang Out)";
+                        if (st === "failed") return "Call Failed";
+                        return src || st || "system";
+                      })()}
                     </span>
                   </div>
                 </div>
@@ -470,13 +508,22 @@ export default function CallLogs() {
                     AI Call Summary
                   </h4>
                   <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 text-xs text-slate-300 leading-relaxed max-h-60 overflow-y-auto">
-                    {selectedCall.ai?.summary || selectedCall.summary ? (
-                      <div className="whitespace-pre-wrap font-sans text-xs text-slate-200 leading-relaxed">
-                        {selectedCall.ai?.summary || selectedCall.summary}
-                      </div>
-                    ) : (
-                      <span className="text-slate-400 italic">No summary generated yet.</span>
-                    )}
+                    {(() => {
+                      const summaryContent =
+                        selectedCall.ai?.summary ||
+                        selectedCall.summary ||
+                        selectedCall.raw_recording_data?.data?.object?.event_data?.conversation_summary ||
+                        selectedCall.raw_recording_data?.conversation_summary;
+
+                      if (summaryContent) {
+                        return (
+                          <div className="whitespace-pre-wrap font-sans text-xs text-slate-200 leading-relaxed">
+                            {summaryContent}
+                          </div>
+                        );
+                      }
+                      return <span className="text-slate-400 italic">No summary generated yet.</span>;
+                    })()}
                   </div>
                 </div>
 

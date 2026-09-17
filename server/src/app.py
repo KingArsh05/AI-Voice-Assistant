@@ -4,6 +4,7 @@ from src.config import Config
 from src.db.connection import Database
 
 from src.controllers.voice_controller import voice_bp
+from src.controllers.hotel_controller import hotel_bp
 
 def create_app() -> Flask:
     app = Flask(__name__)
@@ -18,5 +19,6 @@ def create_app() -> Flask:
         return jsonify({"status": "healthy", "environment": Config.ENV}), 200
 
     app.register_blueprint(voice_bp, url_prefix="/api/v1/voice")
+    app.register_blueprint(hotel_bp, url_prefix="/api/v1/hotels")
 
     return app

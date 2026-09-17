@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { PhoneCall, ListFilter, Bot, Activity, PhoneIncoming } from "lucide-react";
+import { PhoneCall, ListFilter, Bot, Activity, PhoneIncoming, Building2 } from "lucide-react";
 
 export default function Sidebar() {
   const navItems = [
@@ -15,6 +15,12 @@ export default function Sidebar() {
       path: "/call-logs",
       icon: ListFilter,
       badge: "Realtime",
+    },
+    {
+      name: "Hotels",
+      path: "/hotels",
+      icon: Building2,
+      badge: "Config",
     },
   ];
 

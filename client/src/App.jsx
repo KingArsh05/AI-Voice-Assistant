@@ -4,6 +4,7 @@ import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
 import MakeCall from "./components/MakeCall";
 import CallLogs from "./components/CallLogs";
+import Hotels from "./components/Hotels";
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
               <Route path="/" element={<Navigate to="/make-call" replace />} />
               <Route path="/make-call" element={<MakeCall />} />
               <Route path="/call-logs" element={<CallLogs />} />
+              <Route path="/hotels" element={<Hotels />} />
               <Route path="*" element={<Navigate to="/make-call" replace />} />
             </Routes>
           </main>

@@ -20,16 +20,19 @@ class CallService:
         )
         self.db = get_db()
 
-    def _build_dynamic_context(self, data: InitiateCallRequest) -> str:
-        """Assembles prompt and metadata into the conversation context."""
+    def _build_dynamic_context(self, data: InitiateCallRequest, hotel_context: Optional[str] = None) -> str:
+        """Assembles hotel knowledge base, prompt, and metadata into the conversation context."""
         parts = []
+        if hotel_context:
+            parts.append(hotel_context)
+            parts.append("----------------------------------------")
         if data.username:
             parts.append(f"Guest/Client Name: {data.username}")
         if data.persona:
             parts.append(f"Persona/Role: {data.persona}")
         if data.prompt:
             parts.append(f"Instructions & Goals: {data.prompt}")
-        return "\n".join(parts) if parts else "You are an AI voice assistant for StayChat."
+        return "\n\n".join(parts) if parts else "You are an AI voice assistant for StayChat."
 
     def _trigger_plivo_cx(self, to_number: str, context: str) -> dict:
         """Dispatches HTTP POST to Plivo CX Flow endpoint with Basic Auth."""
@@ -59,7 +62,24 @@ class CallService:
 
     def make_call(self, data: InitiateCallRequest) -> dict:
         """Triggers Plivo CX Flow and saves the initiated session in MongoDB."""
-        context = self._build_dynamic_context(data)
+        hotel_snapshot = None
+        hotel_context_str = None
+
+        if data.hotel_id:
+            from src.services.hotel_service import HotelService
+            hotel_svc = HotelService()
+            hotel_doc = hotel_svc.get_hotel(data.hotel_id)
+            if hotel_doc:
+                hotel_context_str = hotel_svc.get_compiled_context(data.hotel_id)
+                hotel_snapshot = {
+                    "hotel_id": data.hotel_id,
+                    "name": hotel_doc.get("name"),
+                    "star_rating": hotel_doc.get("star_rating"),
+                    "property_type": hotel_doc.get("property_type"),
+                    "compiled_context_snapshot": hotel_context_str,
+                }
+
+        context = self._build_dynamic_context(data, hotel_context=hotel_context_str)
 
         # 1. Trigger CX Flow
         resp_json = self._trigger_plivo_cx(to_number=data.to_number, context=context)
@@ -75,6 +95,7 @@ class CallService:
             prompt=data.prompt or "",
             context=context,
             status=CallStatus.INITIATED,
+            hotel=hotel_snapshot,
         )
         self.db.calls.insert_one(session.to_mongo())
 
@@ -121,9 +142,12 @@ class CallService:
             term_source = "agent" if raw_hangup_source == "agent" else "customer"
             term_reason = "normal-clearing"
 
-        # Case B: Call was rejected / cut while ringing
+        # Case B: Call was declined / cut while ringing
+        # Plivo signals: HangupCause = CALL_REJECTED or USER_BUSY, or customer/user-initiated hangup
+        # with no-answer call_status (some carriers)
         elif (
             raw_hangup_cause in ["CALL_REJECTED", "USER_BUSY"]
+            or raw_call_status in ["rejected"]
             or (raw_call_status == "no-answer" and raw_hangup_source in ["customer", "user"])
         ):
             status = "rejected"
@@ -131,12 +155,13 @@ class CallService:
             term_reason = "user-rejected"
 
         # Case C: Destination was Busy
-        elif raw_call_status == "busy" or raw_hangup_cause in ["BUSY", "USER_BUSY"]:
+        elif raw_call_status == "busy" or raw_hangup_cause in ["BUSY"]:
             status = "busy"
             term_source = "system"
             term_reason = "busy"
 
         # Case D: Rang to completion without pickup (No Answer / Timeout)
+        # hangup_source == "agent" here means Plivo's own flow timed out waiting — not the user declining
         elif raw_call_status == "no-answer" or raw_hangup_cause in ["NO_ANSWER", "TIMEOUT"]:
             status = "no-answer"
             term_source = "agent" if raw_hangup_source == "agent" else "system"
@@ -151,7 +176,7 @@ class CallService:
         # Fallback default
         else:
             status = "no-answer"
-            term_source = raw_hangup_source or "customer"
+            term_source = raw_hangup_source or "system"
             term_reason = raw_call_status or "unknown"
 
         # 4. Atomic document updates
@@ -165,6 +190,11 @@ class CallService:
             "duration": duration,
             "hangup_source": term_source,
             "hangup_cause": term_reason,
+            # Raw Plivo signals — persisted so the UI can discriminate
+            # declined (CALL_REJECTED) vs rang-out (NO_ANSWER) definitively
+            "raw_plivo_hangup_cause": raw_hangup_cause,    # e.g. "CALL_REJECTED", "NO_ANSWER", "NORMAL_CLEARING"
+            "raw_plivo_call_status": raw_call_status,      # e.g. "no-answer", "answered", "busy"
+            "raw_plivo_hangup_source": raw_hangup_source,  # e.g. "customer", "agent", "user"
         }
 
         if call_uuid:

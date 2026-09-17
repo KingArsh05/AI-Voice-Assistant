@@ -95,6 +95,27 @@ def get_calls():
                 call_dict["_id"] = str(call_dict["_id"])
             if "created_at" in call_dict and hasattr(call_dict["created_at"], "isoformat"):
                 call_dict["created_at"] = call_dict["created_at"].isoformat()
+
+            # Normalize duration from recording or termination if top-level duration is 0
+            if not call_dict.get("duration") or call_dict.get("duration") == 0:
+                rec_sec = call_dict.get("recording", {}).get("duration_seconds") if isinstance(call_dict.get("recording"), dict) else 0
+                term_sec = call_dict.get("termination", {}).get("duration_seconds") if isinstance(call_dict.get("termination"), dict) else 0
+                flat_rec_sec = call_dict.get("recording_duration", 0)
+                effective_duration = rec_sec or term_sec or flat_rec_sec or 0
+                if effective_duration:
+                    call_dict["duration"] = effective_duration
+
+            # Backfill summary from raw_recording_data if not yet extracted
+            if not call_dict.get("summary") and not (call_dict.get("ai") and call_dict["ai"].get("summary")):
+                rec_obj = call_dict.get("raw_recording_data", {})
+                if isinstance(rec_obj, dict):
+                    ev_data = rec_obj.get("data", {}).get("object", {}).get("event_data", {}) if isinstance(rec_obj.get("data"), dict) else {}
+                    found_summary = ev_data.get("conversation_summary") or ev_data.get("summary")
+                    if found_summary:
+                        call_dict["summary"] = found_summary
+                        if "ai" in call_dict and isinstance(call_dict["ai"], dict):
+                            call_dict["ai"]["summary"] = found_summary
+
             calls.append(call_dict)
 
         return jsonify({"success": True, "data": calls})

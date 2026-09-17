@@ -1,7 +1,154 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useFormContext } from "react-hook-form";
-import { ChevronDown, Search } from "lucide-react";
+import { ChevronDown, Search, Minus, Plus } from "lucide-react";
 import { COUNTRY_CODES } from "../../utils/countryCodes";
+
+/**
+ * Number Stepper Field
+ * Pill-shaped control: [ − ] | value | [ + ]
+ * Matches the reference design with internal dividers and clamped typeable center input.
+ */
+export const NumberStepperField = ({
+  name,
+  label,
+  min = 0,
+  max = 100,
+  step = 1,
+  prefix,
+  suffix,
+  rules = {},
+  disabled = false,
+  helperText,
+}) => {
+  const {
+    watch,
+    setValue,
+    register,
+    formState: { errors },
+  } = useFormContext();
+
+  const rawValue = watch(name);
+  const numValue = parseFloat(rawValue) || 0;
+  const error = errors[name];
+
+  const clamp = (val) => Math.min(max, Math.max(min, val));
+
+  const handleDecrement = () => {
+    if (disabled || numValue <= min) return;
+    setValue(name, clamp(numValue - step), { shouldValidate: true });
+  };
+
+  const handleIncrement = () => {
+    if (disabled || numValue >= max) return;
+    setValue(name, clamp(numValue + step), { shouldValidate: true });
+  };
+
+  const handleInputChange = (e) => {
+    const raw = e.target.value;
+    if (raw === "" || raw === "-") {
+      setValue(name, raw);
+      return;
+    }
+    const parsed = parseFloat(raw);
+    if (!isNaN(parsed)) {
+      setValue(name, parsed, { shouldValidate: false });
+    }
+  };
+
+  const handleInputBlur = () => {
+    const clamped = clamp(numValue);
+    setValue(name, clamped, { shouldValidate: true });
+  };
+
+  const isAtMin = numValue <= min;
+  const isAtMax = numValue >= max;
+
+  return (
+    <div className="flex flex-col gap-1.5 w-full">
+      {label && (
+        <label className="text-sm font-medium text-slate-200">{label}</label>
+      )}
+
+      {/* Hidden input for react-hook-form registration */}
+      <input type="hidden" {...register(name, rules)} />
+
+      {/* Pill container */}
+      <div
+        className={`flex items-stretch bg-slate-900/80 border rounded-xl overflow-hidden transition-all duration-200 ${
+          error
+            ? "border-rose-500 focus-within:ring-2 focus-within:ring-rose-500/20"
+            : "border-slate-800 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 hover:border-slate-700"
+        } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+      >
+        {/* Decrement button */}
+        <button
+          type="button"
+          onClick={handleDecrement}
+          disabled={disabled || isAtMin}
+          aria-label="Decrease value"
+          className={`flex items-center justify-center w-10 shrink-0 transition-all duration-150 active:scale-90 select-none
+            ${isAtMin || disabled
+              ? "text-slate-600 cursor-not-allowed"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 cursor-pointer"
+            }`}
+        >
+          <Minus className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Left divider */}
+        <div className="w-px bg-slate-800/80 shrink-0" />
+
+        {/* Value display / typeable center */}
+        <div className="flex-1 flex items-center justify-center gap-1 px-2 min-w-0">
+          {prefix && (
+            <span className="text-slate-400 text-xs font-mono shrink-0">{prefix}</span>
+          )}
+          <input
+            type="number"
+            value={rawValue ?? 0}
+            onChange={handleInputChange}
+            onBlur={handleInputBlur}
+            disabled={disabled}
+            min={min}
+            max={max}
+            step={step}
+            className="w-full min-w-0 text-center bg-transparent text-slate-100 text-sm font-semibold outline-none appearance-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] py-2.5"
+          />
+          {suffix && (
+            <span className="text-slate-400 text-xs shrink-0">{suffix}</span>
+          )}
+        </div>
+
+        {/* Right divider */}
+        <div className="w-px bg-slate-800/80 shrink-0" />
+
+        {/* Increment button */}
+        <button
+          type="button"
+          onClick={handleIncrement}
+          disabled={disabled || isAtMax}
+          aria-label="Increase value"
+          className={`flex items-center justify-center w-10 shrink-0 transition-all duration-150 active:scale-90 select-none
+            ${isAtMax || disabled
+              ? "text-slate-600 cursor-not-allowed"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 cursor-pointer"
+            }`}
+        >
+          <Plus className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {error && (
+        <span className="text-xs text-rose-400 font-medium">
+          {error.message || "Invalid value"}
+        </span>
+      )}
+      {helperText && !error && (
+        <span className="text-xs text-slate-400">{helperText}</span>
+      )}
+    </div>
+  );
+};
 
 /**
  * Standard Text / Number Input Field

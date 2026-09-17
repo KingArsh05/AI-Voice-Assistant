@@ -111,6 +111,10 @@ class CallSessionModel(BaseModel):
     persona: str = "support"
     prompt: Optional[str] = ""
     context: Optional[str] = ""
+    hotel: Optional[dict] = Field(
+        default=None,
+        description="Hotel snapshot {hotel_id, name, star_rating, compiled_context}"
+    )
 
     # 3. State & Termination
     status: CallStatus = CallStatus.INITIATED
