@@ -1,10 +1,13 @@
 import json
-from flask import Blueprint, request, jsonify, Response
+import logging
+from flask import Blueprint, request, jsonify
 from pydantic import ValidationError
 
 from src.config import Config
 from src.models.call_model import InitiateCallRequest
 from src.services.call_service import CallService
+
+logger = logging.getLogger(__name__)
 
 voice_bp = Blueprint("voice", __name__)
 call_service = CallService()
@@ -17,13 +20,23 @@ def initiate_call():
     except ValidationError as err:
         return jsonify({"success": False, "errors": err.errors()}), 422
 
+    print("\n" + "="*50)
+    print("📞 [CONTROLLER] /api/v1/voice/call triggered")
+    print("Input Payload:", validated_data.model_dump_json(indent=2))
+    print("="*50)
+
     try:
         result = call_service.make_call(validated_data)
-        print("\n[CX Flow Initiated]:", json.dumps(result, indent=4), "\n")
+
+        print("\n" + "="*50)
+        print("✅ [CONTROLLER] make_call completed successfully")
+        print("Trigger ID:", result.get("trigger_id"))
+        print("Response:", json.dumps(result, indent=2, default=str))
+        print("="*50 + "\n")
+
         return jsonify({"success": True, "data": result}), 201
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception("Error initiating call: %s", e)
         return jsonify({"success": False, "message": str(e)}), 500
 
 
@@ -31,13 +44,10 @@ def initiate_call():
 def handle_hangup():
     """Triggered by Plivo when the call ends."""
     data = request.get_json(silent=True) or request.form.to_dict() or {}
-    print(f"\n[Plivo Hangup Event]: {json.dumps(data, indent=2)}\n")
-    
     try:
         call_service.handle_hangup_event(data)
     except Exception as e:
-        print(f"Error handling hangup event: {e}")
-        
+        logger.exception("Error handling hangup event: %s", e)
     return jsonify({"status": "received"}), 200
 
 
@@ -45,13 +55,21 @@ def handle_hangup():
 def handle_recording():
     """Triggered by Plivo when audio recording and transcription are ready."""
     data = request.get_json(silent=True) or request.form.to_dict() or {}
-    print(f"\n[Plivo Recording Event]: {json.dumps(data, indent=2)}\n")
-    
     try:
         call_service.handle_recording_event(data)
     except Exception as e:
-        print(f"Error handling recording event: {e}")
-        
+        logger.exception("Error handling recording event: %s", e)
+    return jsonify({"status": "received"}), 200
+
+
+@voice_bp.route("/events/transcript", methods=["POST"])
+def handle_transcript():
+    """Triggered by Plivo CX AgentFlow HTTP Request node with conversation transcript and summary."""
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    try:
+        call_service.handle_transcript_event(data)
+    except Exception as e:
+        logger.exception("Error handling transcript event: %s", e)
     return jsonify({"status": "received"}), 200
 
 
@@ -59,15 +77,7 @@ def handle_recording():
 def handle_error():
     """Triggered by Plivo if the agent flow encounters an error."""
     data = request.get_json(silent=True) or request.form.to_dict() or {}
-    print(f"\n[Plivo Error Event]: {json.dumps(data, indent=2)}\n")
-    
-    call_uuid = data.get("CallUUID") or data.get("request_uuid")
-    if call_uuid:
-        call_service.db.calls.update_one(
-            {"request_uuid": call_uuid},
-            {"$set": {"status": "failed", "error": data}}
-        )
-        
+    logger.warning("Plivo error event received: %s", data)
     return jsonify({"status": "received"}), 200
 
 
@@ -75,10 +85,8 @@ def handle_error():
 def get_calls():
     """Retrieve call records from MongoDB sorted by most recent."""
     try:
-        # Retroactively parse raw webhook logs if any records have missing fields
-        call_service.backfill_existing_calls()
-
         raw_calls = list(call_service.db.calls.find().sort("created_at", -1).limit(50))
+
         calls = []
         for c in raw_calls:
             call_dict = dict(c)
@@ -88,6 +96,9 @@ def get_calls():
             if "created_at" in call_dict and hasattr(call_dict["created_at"], "isoformat"):
                 call_dict["created_at"] = call_dict["created_at"].isoformat()
             calls.append(call_dict)
-        return jsonify({"success": True, "data": calls}), 200
+
+        return jsonify({"success": True, "data": calls})
+
     except Exception as e:
+        logger.exception("Error retrieving calls: %s", e)
         return jsonify({"success": False, "message": str(e)}), 500

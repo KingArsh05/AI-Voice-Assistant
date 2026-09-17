@@ -14,14 +14,35 @@ import {
   Coins,
   ArrowUpRight,
   Tag,
-  Share2,
   Terminal,
   FileText,
   Copy,
   Check,
   PhoneOff,
   ExternalLink,
+  MessageSquare,
+  User,
+  Bot,
 } from "lucide-react";
+
+// Helper to parse Plivo [Customer]/[Ai_Agent] dialogue text into structured turns
+const parseTranscriptTurns = (rawText) => {
+  if (!rawText || typeof rawText !== "string") return [];
+  const pattern = /\[(Customer|Ai_Agent)\]\s*([\s\S]*?)(?=\[(?:Customer|Ai_Agent)\]|$)/g;
+  const turns = [];
+  let match;
+  while ((match = pattern.exec(rawText)) !== null) {
+    const roleRaw = match[1];
+    const text = match[2].trim();
+    if (text) {
+      turns.push({
+        speaker: roleRaw === "Customer" ? "user" : "agent",
+        text,
+      });
+    }
+  }
+  return turns;
+};
 
 export default function CallLogs() {
   const [calls, setCalls] = useState([]);
@@ -63,10 +84,6 @@ export default function CallLogs() {
 
   useEffect(() => {
     fetchCalls();
-    const interval = setInterval(() => {
-      fetchCalls();
-    }, 6000);
-    return () => clearInterval(interval);
   }, []);
 
   const handleCopy = (text, fieldKey) => {
@@ -77,15 +94,59 @@ export default function CallLogs() {
   };
 
   // Senior Developer Status Handler:
-  // Evaluates both status and hangup_cause/hangup_source to give crystal-clear state
+  // Evaluates both status and telephony signals (duration, termination, raw flags)
   const renderCallStatusBadge = (call) => {
-    const isCustomerHangedUp =
-      call?.hangup_source === "customer" || call?.hangup_cause === "customer";
-    const isAgentHangedUp =
-      call?.hangup_source === "agent" || call?.hangup_cause === "agent";
+    const rawStatus = (call?.status || "").toLowerCase();
+    const callStatus = (
+      call?.call_status ||
+      call?.raw_hangup_data?.data?.object?.event_data?.["Outbound Call.call_status"] ||
+      ""
+    ).toLowerCase();
+    const duration = Number(call?.duration ?? call?.termination?.duration_seconds ?? 0);
+    const termSource = (call?.termination?.source || call?.hangup_source || "").toLowerCase();
+    const termReason = (call?.termination?.reason || call?.hangup_cause || "").toLowerCase();
 
-    if (call?.status === "completed" || call?.call_status === "completed") {
-      if (isCustomerHangedUp) {
+    // 1. Zero Duration Calls (Never Picked Up)
+    if (duration === 0) {
+      // Case A: User explicitly declined/cut the call while ringing (Carrier returns busy/user_busy/rejected)
+      if (
+        rawStatus === "busy" ||
+        callStatus === "busy" ||
+        termReason === "busy" ||
+        termReason === "user-rejected" ||
+        termReason === "call-rejected" ||
+        rawStatus === "rejected"
+      ) {
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/25">
+            <PhoneOff className="w-3 h-3" />
+            Call Declined by User
+          </span>
+        );
+      }
+
+      // Case B: Telephony/Carrier Error
+      if (rawStatus === "failed") {
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
+            <XCircle className="w-3 h-3" />
+            Call Failed
+          </span>
+        );
+      }
+
+      // Case C: Phone rang until timeout (Nobody answered or touched the phone)
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-slate-500/10 text-slate-300 border border-slate-500/25">
+          <PhoneOff className="w-3 h-3" />
+          Unanswered (Rang Out)
+        </span>
+      );
+    }
+
+    // 4. Completed conversation (duration > 0)
+    if (rawStatus === "completed" || duration > 0) {
+      if (termSource === "customer" || termSource === "user") {
         return (
           <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/25">
             <PhoneOff className="w-3 h-3" />
@@ -93,7 +154,7 @@ export default function CallLogs() {
           </span>
         );
       }
-      if (isAgentHangedUp) {
+      if (termSource === "agent") {
         return (
           <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
             <CheckCircle2 className="w-3 h-3" />
@@ -109,7 +170,8 @@ export default function CallLogs() {
       );
     }
 
-    if (call?.status === "failed") {
+    // 5. Failed
+    if (rawStatus === "failed") {
       return (
         <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
           <XCircle className="w-3 h-3" />
@@ -118,10 +180,11 @@ export default function CallLogs() {
       );
     }
 
+    // 6. In-Progress or Initiated
     return (
       <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
         <AlertCircle className="w-3 h-3 animate-pulse" />
-        {call?.status || "Initiated"}
+        {rawStatus ? rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1) : "Initiated"}
       </span>
     );
   };
@@ -224,14 +287,14 @@ export default function CallLogs() {
                     <div className="flex items-center gap-3">
                       <span className="flex items-center gap-1 font-mono">
                         <Clock className="w-3 h-3 text-slate-500" />
-                        {call.duration ? `${call.duration}s` : "0s"}
+                        {call.duration || call.termination?.duration_seconds || call.recording?.duration_seconds ? `${call.duration || call.termination?.duration_seconds || call.recording?.duration_seconds}s` : "0s"}
                       </span>
                       {call.bill_rate && (
                         <span className="text-emerald-400/80 font-mono">
                           ${call.bill_rate}/min
                         </span>
                       )}
-                      {call.recording_url && (
+                      {(call.recording?.url || call.recording_url) && (
                         <span className="flex items-center gap-1 text-[10px] text-indigo-400 font-medium">
                           <Volume2 className="w-3 h-3" />
                           Audio
@@ -286,21 +349,19 @@ export default function CallLogs() {
                   </div>
                 </div>
 
-                {/* 2. Audio Player with Recording Duration */}
-                {selectedCall.recording_url ? (
-                  <div className="p-4 rounded-2xl bg-indigo-950/30 border border-indigo-500/20 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-indigo-300">
+                {/* 2. Audio Player (if recorded) */}
+                {(selectedCall.recording?.url || selectedCall.recording_url) ? (
+                  <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs text-slate-300">
+                      <div className="flex items-center gap-2">
                         <Volume2 className="w-4 h-4 text-indigo-400" />
-                        <span>Call Audio Recording</span>
-                        {selectedCall.recording_duration ? (
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-200 font-mono">
-                            {selectedCall.recording_duration}s recorded
-                          </span>
-                        ) : null}
+                        <span className="font-medium">Call Recording</span>
+                        <span className="text-[11px] text-slate-400">
+                          ({selectedCall.recording?.duration_seconds || selectedCall.recording_duration || selectedCall.duration || 0}s)
+                        </span>
                       </div>
                       <a
-                        href={selectedCall.recording_url}
+                        href={selectedCall.recording?.url || selectedCall.recording_url}
                         target="_blank"
                         rel="noreferrer"
                         className="text-[11px] text-indigo-400 hover:text-indigo-300 underline font-medium"
@@ -311,7 +372,7 @@ export default function CallLogs() {
                     <audio
                       controls
                       className="w-full h-10 rounded-lg accent-indigo-500"
-                      src={selectedCall.recording_url}
+                      src={selectedCall.recording?.url || selectedCall.recording_url}
                     >
                       Your browser does not support audio playback.
                     </audio>
@@ -360,7 +421,18 @@ export default function CallLogs() {
                       {selectedCall.bill_rate ? `$${selectedCall.bill_rate} / min` : "Standard"}
                     </span>
                     <span className="text-[10px] text-slate-400 capitalize">
-                      Termination: {selectedCall.hangup_source || selectedCall.hangup_cause || "customer"}
+                      Termination:{" "}
+                      {Number(selectedCall.duration || 0) === 0
+                        ? (
+                            selectedCall.status === "busy" ||
+                            selectedCall.call_status === "busy" ||
+                            selectedCall.termination?.reason === "busy" ||
+                            selectedCall.termination?.reason === "user-rejected" ||
+                            selectedCall.status === "rejected"
+                              ? "Declined by User"
+                              : "Unanswered (Rang Out)"
+                          )
+                        : (selectedCall.termination?.source || selectedCall.hangup_source || "system")}
                     </span>
                   </div>
                 </div>
@@ -397,9 +469,11 @@ export default function CallLogs() {
                     <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
                     AI Call Summary
                   </h4>
-                  <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 text-xs text-slate-300 leading-relaxed">
-                    {selectedCall.summary ? (
-                      selectedCall.summary
+                  <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 text-xs text-slate-300 leading-relaxed max-h-60 overflow-y-auto">
+                    {selectedCall.ai?.summary || selectedCall.summary ? (
+                      <div className="whitespace-pre-wrap font-sans text-xs text-slate-200 leading-relaxed">
+                        {selectedCall.ai?.summary || selectedCall.summary}
+                      </div>
                     ) : (
                       <span className="text-slate-400 italic">No summary generated yet.</span>
                     )}
@@ -410,8 +484,8 @@ export default function CallLogs() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5 text-emerald-400" />
-                      Call Transcription
+                      <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                      Conversation Dialogue & Transcript
                     </h4>
                     <div className="flex items-center gap-2">
                       {selectedCall.conversation_url && (
@@ -425,9 +499,9 @@ export default function CallLogs() {
                           <ExternalLink className="w-3 h-3" />
                         </a>
                       )}
-                      {selectedCall.transcript && (
+                      {(selectedCall.ai?.transcript_text || selectedCall.transcript) && (
                         <button
-                          onClick={() => handleCopy(selectedCall.transcript, "transcript")}
+                          onClick={() => handleCopy(selectedCall.ai?.transcript_text || selectedCall.transcript, "transcript")}
                           className="text-[11px] text-slate-400 hover:text-slate-200 flex items-center gap-1 cursor-pointer"
                         >
                           {copiedField === "transcript" ? (
@@ -440,15 +514,67 @@ export default function CallLogs() {
                       )}
                     </div>
                   </div>
-                  <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800/80 text-xs text-slate-300 max-h-48 overflow-y-auto whitespace-pre-wrap leading-relaxed font-sans">
-                    {selectedCall.transcript ? (
-                      selectedCall.transcript
-                    ) : (
-                      <span className="text-slate-400 italic">
-                        Full transcript available in Plivo CX conversation portal (check link above).
-                      </span>
-                    )}
-                  </div>
+
+                  {/* Turn-by-Turn Dialogue Rendering */}
+                  {(() => {
+                    const turns =
+                      selectedCall.ai?.conversation && selectedCall.ai.conversation.length > 0
+                        ? selectedCall.ai.conversation
+                        : parseTranscriptTurns(selectedCall.ai?.transcript_text || selectedCall.transcript);
+
+                    if (turns.length > 0) {
+                      return (
+                        <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-2.5 max-h-64 overflow-y-auto">
+                          {turns.map((turn, i) => {
+                            const isAgent = turn.speaker === "agent";
+                            return (
+                              <div
+                                key={i}
+                                className={`flex gap-2.5 text-xs ${
+                                  isAgent ? "justify-start" : "justify-end"
+                                }`}
+                              >
+                                {isAgent && (
+                                  <div className="w-6 h-6 rounded-full bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0 mt-0.5">
+                                    <Bot className="w-3.5 h-3.5" />
+                                  </div>
+                                )}
+                                <div
+                                  className={`p-2.5 rounded-2xl max-w-[80%] leading-relaxed ${
+                                    isAgent
+                                      ? "bg-slate-900 border border-slate-800 text-slate-200"
+                                      : "bg-indigo-600/25 border border-indigo-500/30 text-indigo-100"
+                                  }`}
+                                >
+                                  <div className="text-[10px] uppercase font-semibold text-slate-400 mb-0.5">
+                                    {isAgent ? "StayChat AI" : selectedCall.username || "Guest"}
+                                  </div>
+                                  <div>{turn.text}</div>
+                                </div>
+                                {!isAgent && (
+                                  <div className="w-6 h-6 rounded-full bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 mt-0.5">
+                                    <User className="w-3.5 h-3.5" />
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800/80 text-xs text-slate-300 max-h-48 overflow-y-auto whitespace-pre-wrap leading-relaxed font-sans">
+                        {selectedCall.ai?.transcript_text || selectedCall.transcript ? (
+                          selectedCall.ai?.transcript_text || selectedCall.transcript
+                        ) : (
+                          <span className="text-slate-400 italic">
+                            Full transcript available in Plivo CX conversation portal (check link above).
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* 7. Plivo Raw Identifiers & UUIDs */}
