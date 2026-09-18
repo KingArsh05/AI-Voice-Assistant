@@ -21,18 +21,59 @@ class CallService:
         self.db = get_db()
 
     def _build_dynamic_context(self, data: InitiateCallRequest, hotel_context: Optional[str] = None) -> str:
-        """Assembles hotel knowledge base, prompt, and metadata into the conversation context."""
+        """Assembles the dynamic context payload for the Plivo CX AI Agent.
+
+        IMPORTANT: This context is injected directly into the Plivo CX Flow and may be
+        spoken aloud or used verbatim by the AI. Keep it concise and data-driven —
+        NOT verbose instruction prose. The Plivo AI agent's own system prompt handles
+        behaviour; this context only needs to supply dynamic call-specific data.
+
+        Fields:
+          - Customer: the person being called (NOT the AI's own name)
+          - Enquiry / Purpose: the reason for the call
+          - Agent Role: the AI's persona for this call
+          - Hotel context (if selected): property knowledge base
+        """
         parts = []
+
+        # Hotel knowledge base goes first if selected
         if hotel_context:
             parts.append(hotel_context)
             parts.append("----------------------------------------")
+
+        # Write as natural spoken-friendly sentences — NO key:value labels.
+        # Plivo CX injects this context into spoken messages, so labels like
+        # "Customer Name:" or "Agent Role:" will be read aloud literally — avoid them.
+        # Persona is intentionally excluded here; the Plivo CX Flow already defines the agent role.
+        if data.username and data.prompt:
+            parts.append(f"You are calling {data.username}. {data.prompt.strip()}")
+        elif data.username:
+            parts.append(f"You are calling {data.username}.")
+        elif data.prompt:
+            parts.append(data.prompt.strip())
+
+        # ── Hard system boundaries (always applied, override user's custom prompt) ──
+        # These ensure correct behaviour regardless of what the operator wrote.
+        boundaries = []
         if data.username:
-            parts.append(f"Guest/Client Name: {data.username}")
-        if data.persona:
-            parts.append(f"Persona/Role: {data.persona}")
-        if data.prompt:
-            parts.append(f"Instructions & Goals: {data.prompt}")
-        return "\n\n".join(parts) if parts else "You are an AI voice assistant for StayChat."
+            # Boundary 1: Must greet by customer name — avoids generic "Hello!"
+            boundaries.append(
+                f"IMPORTANT: Begin the call by greeting {data.username} by name "
+                f"(e.g. 'Hello {data.username}!'). Do not start with a generic greeting."
+            )
+        # Boundary 2: No fake call transfers — there is no transfer capability.
+        # Without this, the AI hallucinates a transfer when the prompt says things like
+        # 'connect them to the front desk', which breaks customer trust.
+        boundaries.append(
+            "IMPORTANT: You CANNOT transfer, forward, or connect this call to any person, "
+            "department, or team. Do not promise or imply a call transfer. "
+            "Instead, acknowledge the customer's concern, help where you can, "
+            "and assure them that the relevant team will follow up with them shortly."
+        )
+        if boundaries:
+            parts.append("\n".join(boundaries))
+
+        return "\n\n".join(parts) if parts else "You are a helpful AI assistant for StayChat."
 
     def _trigger_plivo_cx(self, to_number: str, context: str) -> dict:
         """Dispatches HTTP POST to Plivo CX Flow endpoint with Basic Auth."""

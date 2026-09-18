@@ -24,7 +24,7 @@ export default function MakeCall() {
       to_phone_number: "",
       hotel_id: "",
       ai_persona: "concierge",
-      custom_prompt: "You are a helpful customer concierge representing StayChat.",
+      custom_prompt: "Customer has raised an enquiry about their booking. Understand their concern, assist where possible, and assure them the team will follow up if needed.",
     },
   });
 
@@ -115,9 +115,10 @@ export default function MakeCall() {
           <form onSubmit={methods.handleSubmit(onSubmit)} className="space-y-4">
             <InputField
               name="username"
-              label="Username / Client Name"
-              placeholder="e.g. Staychat Client Name"
-              rules={{ required: "Username is required" }}
+              label="Customer Name (Person You're Calling)"
+              placeholder="e.g. Arsh, Ravi, Priya"
+              helperText="The name of the customer — the AI will address them by this name during the call"
+              rules={{ required: "Customer name is required" }}
             />
 
             <PhoneInputField
@@ -133,7 +134,7 @@ export default function MakeCall() {
               phoneName="to_phone_number"
               label="To (Destination Number)"
               placeholder="9876543210"
-              helperText="The user or customer whom the AI assistant will call"
+              helperText="Phone number of the customer named above — the AI will call this number"
             />
 
             <SelectField
