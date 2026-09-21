@@ -125,10 +125,18 @@ export default function CallLogs() {
       // Normal call end after conversation
       if (rawPlivoCause === "NORMAL_CLEARING") {
         const endedByAgent = termSource === "agent";
+        if (endedByAgent) {
+          return (
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+              <Bot className="w-3 h-3 text-indigo-400" />
+              Ended by Agent
+            </span>
+          );
+        }
         return (
           <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <CheckCircle2 className="w-3 h-3" />
-            {endedByAgent ? "Ended by Agent" : "Completed"}
+            Completed
           </span>
         );
       }
@@ -146,10 +154,18 @@ export default function CallLogs() {
     // --- Priority 2: DB status (set by hangup state machine) ---
     // 1. Completed Call
     if (rawStatus === "completed") {
+      if (termSource === "agent") {
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+            <Bot className="w-3 h-3 text-indigo-400" />
+            Ended by Agent
+          </span>
+        );
+      }
       return (
         <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
           <CheckCircle2 className="w-3 h-3" />
-          {termSource === "agent" ? "Ended by Agent" : "Completed"}
+          Completed
         </span>
       );
     }
@@ -222,9 +238,9 @@ export default function CallLogs() {
   };
 
   return (
-    <div className="flex-1 p-6 lg:p-8 overflow-y-auto max-w-7xl mx-auto w-full">
+    <div className="flex-1 p-6 lg:p-8 flex flex-col min-h-0 max-w-7xl mx-auto w-full">
       {/* Top action header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 shrink-0">
         <div>
           <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2.5">
             Voice Call Records & Telemetry
@@ -263,10 +279,10 @@ export default function CallLogs() {
           </p>
         </div>
       ) : (
-        /* Split view: Call List on Left, Call Detail on Right */
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* List panel */}
-          <div className="lg:col-span-5 space-y-2.5">
+        /* Split view: Call List on Left, Call Detail on Right - Independent Scrolling */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start flex-1 min-h-0">
+          {/* List panel - scrollable on its own */}
+          <div className="lg:col-span-5 space-y-2.5 lg:overflow-y-auto lg:h-[calc(100vh-180px)] lg:pr-2">
             {calls.map((call, idx) => {
               const callKey = call.id || call._id || `call-${idx}`;
               const isSelected = selectedCall && (
@@ -292,7 +308,7 @@ export default function CallLogs() {
                       </div>
                       <div>
                         <h4 className="text-xs font-semibold text-slate-100 flex items-center gap-1.5">
-                          {call.username || "Guest"}
+                          {call.guest_name || "Guest"}
                           {call.to_country && (
                             <span className="text-[10px] text-slate-400 font-normal">
                               ({call.to_country})
@@ -342,8 +358,8 @@ export default function CallLogs() {
             })}
           </div>
 
-          {/* Details panel */}
-          <div className="lg:col-span-7 bg-slate-900/60 border border-slate-800/80 backdrop-blur-xl rounded-3xl p-6 shadow-xl sticky top-24 space-y-6">
+          {/* Details panel - independent scrollable container */}
+          <div className="lg:col-span-7 bg-slate-900/60 border border-slate-800/80 backdrop-blur-xl rounded-3xl p-6 shadow-xl lg:overflow-y-auto lg:h-[calc(100vh-180px)] space-y-6">
             {selectedCall ? (
               <>
                 {/* 1. Top Header & Destination info */}
@@ -360,7 +376,7 @@ export default function CallLogs() {
                       )}
                     </div>
                     <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                      {selectedCall.username || "Guest Customer"}
+                      {selectedCall.guest_name || "Guest Customer"}
                       {selectedCall.hotel?.name && (
                         <span className="text-[11px] font-normal px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 flex items-center gap-1">
                           🏨 {selectedCall.hotel.name} {"★".repeat(selectedCall.hotel.star_rating || 4)}
@@ -594,7 +610,7 @@ export default function CallLogs() {
                                   }`}
                                 >
                                   <div className="text-[10px] uppercase font-semibold text-slate-400 mb-0.5">
-                                    {isAgent ? "StayChat AI" : selectedCall.username || "Guest"}
+                                    {isAgent ? "StayChat AI" : selectedCall.guest_name || "Guest"}
                                   </div>
                                   <div>{turn.text}</div>
                                 </div>

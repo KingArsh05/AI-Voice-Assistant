@@ -6,7 +6,18 @@ import {
   TextareaField,
   PhoneInputField,
 } from "./common/FormControl";
-import { PhoneCall, Bot, Loader2, CheckCircle2, AlertCircle, Building2, Sparkles } from "lucide-react";
+import {
+  PhoneCall,
+  Bot,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Building2,
+  Sparkles,
+} from "lucide-react";
+
+
+
 
 export default function MakeCall() {
   const [callStatus, setCallStatus] = useState({ state: "idle", message: "" });
@@ -17,14 +28,15 @@ export default function MakeCall() {
 
   const methods = useForm({
     defaultValues: {
-      username: "",
+      guest_name: "",
       from_country_code: "+91",
       from_phone_number: "8031825752",
       to_country_code: "+91",
       to_phone_number: "",
       hotel_id: "",
-      ai_persona: "concierge",
-      custom_prompt: "Customer has raised an enquiry about their booking. Understand their concern, assist where possible, and assure them the team will follow up if needed.",
+      persona: "concierge",
+      guest_query:
+        "Guest has called regarding their booking. Please assist with their enquiry and assure them the team will follow up if needed.",
     },
   });
 
@@ -50,14 +62,17 @@ export default function MakeCall() {
   }, [backendUrl]);
 
   const onSubmit = async (data) => {
-    setCallStatus({ state: "loading", message: "Triggering Plivo CX Voice Agent..." });
+    setCallStatus({
+      state: "loading",
+      message: "Triggering Plivo CX Voice Agent...",
+    });
 
     const payload = {
-      username: data.username,
+      guest_name: data.guest_name,
       from_number: `${data.from_country_code}${data.from_phone_number}`,
       to_number: `${data.to_country_code}${data.to_phone_number}`,
-      persona: data.ai_persona,
-      prompt: data.custom_prompt,
+      persona: data.persona,
+      guest_query: data.guest_query,
       hotel_id: data.hotel_id || null,
     };
 
@@ -84,7 +99,8 @@ export default function MakeCall() {
     } catch (err) {
       setCallStatus({
         state: "error",
-        message: err.message || "Network error communicating with backend server.",
+        message:
+          err.message || "Network error communicating with backend server.",
       });
     }
   };
@@ -114,12 +130,13 @@ export default function MakeCall() {
         <FormProvider {...methods}>
           <form onSubmit={methods.handleSubmit(onSubmit)} className="space-y-4">
             <InputField
-              name="username"
-              label="Customer Name (Person You're Calling)"
+              name="guest_name"
+              label="Guest Name (Person You're Calling)"
               placeholder="e.g. Arsh, Ravi, Priya"
-              helperText="The name of the customer — the AI will address them by this name during the call"
-              rules={{ required: "Customer name is required" }}
+              helperText="The guest's name — the AI will greet and address them by this name during the call"
+              rules={{ required: "Guest name is required" }}
             />
+
 
             <PhoneInputField
               countryCodeName="from_country_code"
@@ -138,7 +155,7 @@ export default function MakeCall() {
             />
 
             <SelectField
-              name="ai_persona"
+              name="persona"
               label="AI Assistant Persona"
               placeholder=""
               options={[
@@ -173,11 +190,15 @@ export default function MakeCall() {
                       {selectedHotel.name}
                     </span>
                     <span className="text-[10px] text-amber-400 font-mono">
-                      {"★".repeat(selectedHotel.star_rating || 4)} {selectedHotel.property_type}
+                      {"★".repeat(selectedHotel.star_rating || 4)}{" "}
+                      {selectedHotel.property_type}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-300">
-                    {selectedHotel.room_types?.length || 0} Room Categories • Check-in: {selectedHotel.policies?.check_in_time || "14:00"} • Check-out: {selectedHotel.policies?.check_out_time || "12:00"}
+                    {selectedHotel.room_types?.length || 0} Room Categories •
+                    Check-in: {selectedHotel.policies?.check_in_time || "14:00"}{" "}
+                    • Check-out:{" "}
+                    {selectedHotel.policies?.check_out_time || "12:00"}
                   </p>
                   {selectedHotel.inventory_notes && (
                     <p className="text-[10px] text-amber-300/90 font-medium bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
@@ -186,18 +207,21 @@ export default function MakeCall() {
                   )}
                   <p className="text-[10px] text-indigo-400/80 flex items-center gap-1">
                     <Sparkles className="w-3 h-3" />
-                    Full property amenities, dining, and rates will be compiled into this call's AI system prompt.
+                    <code className="text-[9px] bg-slate-800/60 px-1 py-0.5 rounded border border-slate-700/50">hotel_knowledge_brief</code>
+                    compiled from DB on call initiation — rooms, rates, policies & more.
                   </p>
                 </div>
               )}
+
             </div>
 
+
             <TextareaField
-              name="custom_prompt"
-              label="Custom Instructions / Agent Context"
+              name="guest_query"
+              label="Customer Query"
               rows={3}
-              placeholder="Provide background knowledge or call goals..."
-              helperText="Instructions passed to the AI voice model during the call"
+              placeholder="Describe the guest's issue or reason for the call — e.g. 'Guest is asking about early check-in and room upgrade availability.'"
+              helperText="Describe what the guest is asking about — the AI uses this to understand the purpose of the call"
             />
 
             {callStatus.state !== "idle" && (
@@ -206,8 +230,8 @@ export default function MakeCall() {
                   callStatus.state === "loading"
                     ? "bg-indigo-950/40 border-indigo-500/30 text-indigo-300"
                     : callStatus.state === "success"
-                    ? "bg-emerald-950/40 border-emerald-500/30 text-emerald-300"
-                    : "bg-rose-950/40 border-rose-500/30 text-rose-300"
+                      ? "bg-emerald-950/40 border-emerald-500/30 text-emerald-300"
+                      : "bg-rose-950/40 border-rose-500/30 text-rose-300"
                 }`}
               >
                 {callStatus.state === "loading" && (

@@ -102,14 +102,14 @@ class CallSessionModel(BaseModel):
     flow_name: Optional[str] = None
 
     # 2. Telephony
-    username: str = Field(..., min_length=1, max_length=100)
+    guest_name: str = Field(..., min_length=1, max_length=100, description="The guest being called")
     from_number: str = Field(..., pattern=r"^\+[1-9]\d{7,14}$")
     to_number: str = Field(..., pattern=r"^\+[1-9]\d{7,14}$")
     from_country: Optional[str] = None
     to_country: Optional[str] = None
     direction: str = "outbound"
     persona: str = "support"
-    prompt: Optional[str] = ""
+    guest_query: Optional[str] = ""
     context: Optional[str] = ""
     hotel: Optional[dict] = Field(
         default=None,

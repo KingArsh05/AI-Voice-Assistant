@@ -4,11 +4,11 @@ from datetime import datetime, timezone
 
 
 class InitiateCallRequest(BaseModel):
-    username: str = Field(..., min_length=2, max_length=50)
+    guest_name: str = Field(..., min_length=2, max_length=50, description="The guest being called — used for AI greeting and Plivo guest_name param")
     from_number: str = Field(..., pattern=r"^\+[1-9]\d{7,14}$")
     to_number: str = Field(..., pattern=r"^\+[1-9]\d{7,14}$")
     persona: str = Field(default="support")
-    prompt: Optional[str] = Field(default="")
+    guest_query: Optional[str] = Field(default="", description="Guest's specific issue/enquiry — used as Plivo guest_query param")
     hotel_id: Optional[str] = Field(default=None, description="Selected Hotel ID for dynamic AI prompt injection")
 
 
@@ -22,7 +22,7 @@ class CallRecord(BaseModel):
     conversation_url: Optional[str] = None
     node_name: Optional[str] = None
 
-    username: str
+    guest_name: Optional[str] = None
     from_number: str
     to_number: str
     from_country: Optional[str] = None

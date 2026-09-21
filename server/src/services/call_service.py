@@ -20,64 +20,109 @@ class CallService:
         )
         self.db = get_db()
 
-    def _build_dynamic_context(self, data: InitiateCallRequest, hotel_context: Optional[str] = None) -> str:
-        """Assembles the dynamic context payload for the Plivo CX AI Agent.
+    def build_hotel_knowledge_brief(self, hotel_id: str) -> Optional[str]:
+        """
+        Queries ai_voice_assistant.hotels collection by hotel_id and compiles
+        the full property data into the `hotel_knowledge_brief` context string.
 
-        IMPORTANT: This context is injected directly into the Plivo CX Flow and may be
-        spoken aloud or used verbatim by the AI. Keep it concise and data-driven —
-        NOT verbose instruction prose. The Plivo AI agent's own system prompt handles
-        behaviour; this context only needs to supply dynamic call-specific data.
+        Pipeline:
+          1. DB query  : ai_voice_assistant.hotels.find_one({ hotel_id: hotel_id })
+          2. Pydantic  : HotelModel(**doc) — validates & structures the document
+          3. Compile   : HotelModel.compile_ai_context() — renders natural-language brief
+          4. Return    : structured string labelled [hotel_knowledge_brief]
 
-        Fields:
-          - Customer: the person being called (NOT the AI's own name)
-          - Enquiry / Purpose: the reason for the call
-          - Agent Role: the AI's persona for this call
-          - Hotel context (if selected): property knowledge base
+        Returns None if no active hotel is found for the given hotel_id.
+        """
+        from src.services.hotel_service import HotelService
+        hotel_svc = HotelService()
+        return hotel_svc.get_compiled_context(hotel_id)
+
+    def _build_dynamic_context(self, data: InitiateCallRequest, hotel_knowledge_brief: Optional[str] = None) -> str:
+        """Assembles the structured dynamic context payload injected into the Plivo CX AI Agent.
+
+        Structure (three clearly labelled sections):
+          1. [hotel_knowledge_brief]  — full property data from ai_voice_assistant.hotels
+          2. [guest_profile]          — guest name + their specific query / issue
+          3. [call_boundaries]        — hard guardrails that override all other instructions
+
+        Keeping the sections distinct lets the AI:
+          • Know WHO it is calling (guest name, so it greets correctly)
+          • Know WHY it is calling (the guest's query, so it stays on-topic)
+          • Know WHAT to answer from (hotel_knowledge_brief only, not hallucinated data)
+          • Know WHAT it must never do (no fake transfers, no off-topic promises)
         """
         parts = []
 
-        # Hotel knowledge base goes first if selected
-        if hotel_context:
-            parts.append(hotel_context)
-            parts.append("----------------------------------------")
-
-        # Write as natural spoken-friendly sentences — NO key:value labels.
-        # Plivo CX injects this context into spoken messages, so labels like
-        # "Customer Name:" or "Agent Role:" will be read aloud literally — avoid them.
-        # Persona is intentionally excluded here; the Plivo CX Flow already defines the agent role.
-        if data.username and data.prompt:
-            parts.append(f"You are calling {data.username}. {data.prompt.strip()}")
-        elif data.username:
-            parts.append(f"You are calling {data.username}.")
-        elif data.prompt:
-            parts.append(data.prompt.strip())
-
-        # ── Hard system boundaries (always applied, override user's custom prompt) ──
-        # These ensure correct behaviour regardless of what the operator wrote.
-        boundaries = []
-        if data.username:
-            # Boundary 1: Must greet by customer name — avoids generic "Hello!"
-            boundaries.append(
-                f"IMPORTANT: Begin the call by greeting {data.username} by name "
-                f"(e.g. 'Hello {data.username}!'). Do not start with a generic greeting."
+        # ── Section 1: hotel_knowledge_brief ─────────────────────────────────────
+        # Compiled from ai_voice_assistant.hotels collection via hotel_id lookup.
+        # Goes first so the AI has full property context before reading the guest query.
+        if hotel_knowledge_brief:
+            parts.append(
+                "Use the following verified property information to answer any guest questions "
+                "about rooms, rates, amenities, check-in/check-out, dining, or policies. "
+                "Do NOT invent details not listed here.\n\n"
+                + hotel_knowledge_brief.strip()
             )
-        # Boundary 2: No fake call transfers — there is no transfer capability.
-        # Without this, the AI hallucinates a transfer when the prompt says things like
-        # 'connect them to the front desk', which breaks customer trust.
+
+        # ── Section 2: guest_profile ──────────────────────────────────────────────
+        # Clearly identifies the guest and their specific issue/query.
+        guest_lines = []
+        if data.guest_name:
+            guest_lines.append(f"Guest Name : {data.guest_name}")
+        if data.guest_query:
+            guest_lines.append(f"Guest Query: {data.guest_query.strip()}")
+
+        if guest_lines:
+            parts.append(
+                "=== [guest_profile] ===\n"
+                + "\n".join(guest_lines) + "\n\n"
+                "Address the guest by their name throughout the call. "
+                "Focus the conversation on resolving the Guest Query above. "
+                "If the guest raises additional questions, answer them using the hotel_knowledge_brief."
+            )
+
+        # ── Section 3: call_boundaries (hard guardrails) ─────────────────────────
+        # Always appended last so they override everything above.
+        boundaries = []
+
+        if data.guest_name:
+            boundaries.append(
+                f"RULE — GREETING: Always begin the call by greeting {data.guest_name} by name "
+                f"(e.g. 'Hello {data.guest_name}, this is StayChat calling.'). "
+                "Never start with a generic 'Hello' or 'Hi there'."
+            )
+
         boundaries.append(
-            "IMPORTANT: You CANNOT transfer, forward, or connect this call to any person, "
-            "department, or team. Do not promise or imply a call transfer. "
-            "Instead, acknowledge the customer's concern, help where you can, "
-            "and assure them that the relevant team will follow up with them shortly."
+            "RULE — NO TRANSFERS: You CANNOT transfer, forward, or connect this call to any "
+            "person, department, or team. Do not promise or imply a call transfer. "
+            "Instead, acknowledge the guest's concern, assist where you can from the "
+            "hotel_knowledge_brief, and assure them the relevant team will follow up shortly."
         )
-        if boundaries:
-            parts.append("\n".join(boundaries))
+
+        boundaries.append(
+            "RULE — STAY ON-TOPIC: Only answer questions using information from the "
+            "hotel_knowledge_brief and Guest Query above. If you genuinely do not know, say: "
+            "'I don't have that detail right now, but our team will follow up with you.'"
+        )
+
+        parts.append("=== [call_boundaries] ===\n" + "\n\n".join(boundaries))
 
         return "\n\n".join(parts) if parts else "You are a helpful AI assistant for StayChat."
 
-    def _trigger_plivo_cx(self, to_number: str, context: str) -> dict:
-        """Dispatches HTTP POST to Plivo CX Flow endpoint with Basic Auth."""
-        payload = json.dumps({"to_number": to_number, "context": context}).encode("utf-8")
+    def _trigger_plivo_cx(self, to_number: str, plivo_params: dict) -> dict:
+        """
+        Dispatches HTTP POST to Plivo CX Flow endpoint with Basic Auth.
+
+        Sends named variables as separate keys so Plivo instructions can reference
+        each one individually via {{Start.http.params.<key>}}:
+
+          to_number             → the destination phone number
+          hotel_knowledge_brief → compiled hotel data from ai_voice_assistant.hotels
+          guest_name            → the person being called (used for greeting)
+          guest_query           → the guest's specific issue / reason for the call
+        """
+        payload_dict = {"to_number": to_number, **plivo_params}
+        payload = json.dumps(payload_dict).encode("utf-8")
         credentials = base64.b64encode(
             f"{Config.PLIVO_AUTH_ID}:{Config.PLIVO_AUTH_TOKEN}".encode("utf-8")
         ).decode("utf-8")
@@ -101,40 +146,73 @@ class CallService:
             logger.error("Plivo CX API HTTP Error %s: %s", e.code, err_msg)
             raise RuntimeError(f"Plivo API returned {e.code}: {err_msg}")
 
+
     def make_call(self, data: InitiateCallRequest) -> dict:
-        """Triggers Plivo CX Flow and saves the initiated session in MongoDB."""
+        """
+        Triggers Plivo CX Flow and saves the initiated session in MongoDB.
+
+        Sends 4 named variables to Plivo CX (accessible as {{Start.http.params.<key>}}):
+          • hotel_knowledge_brief  — full hotel data compiled from ai_voice_assistant.hotels
+          • guest_name             — the person being called
+          • guest_query            — the guest's specific issue or enquiry
+        """
         hotel_snapshot = None
-        hotel_context_str = None
+        hotel_knowledge_brief = None
 
+        # ── Step 1: Compile hotel_knowledge_brief from DB ─────────────────────────
         if data.hotel_id:
-            from src.services.hotel_service import HotelService
-            hotel_svc = HotelService()
-            hotel_doc = hotel_svc.get_hotel(data.hotel_id)
-            if hotel_doc:
-                hotel_context_str = hotel_svc.get_compiled_context(data.hotel_id)
-                hotel_snapshot = {
-                    "hotel_id": data.hotel_id,
-                    "name": hotel_doc.get("name"),
-                    "star_rating": hotel_doc.get("star_rating"),
-                    "property_type": hotel_doc.get("property_type"),
-                    "compiled_context_snapshot": hotel_context_str,
-                }
+            hotel_knowledge_brief = self.build_hotel_knowledge_brief(data.hotel_id)
 
-        context = self._build_dynamic_context(data, hotel_context=hotel_context_str)
+            if hotel_knowledge_brief:
+                from src.services.hotel_service import HotelService
+                hotel_svc = HotelService()
+                hotel_doc = hotel_svc.get_hotel(data.hotel_id)
+                if hotel_doc:
+                    hotel_snapshot = {
+                        "hotel_id": data.hotel_id,
+                        "name": hotel_doc.get("name"),
+                        "star_rating": hotel_doc.get("star_rating"),
+                        "property_type": hotel_doc.get("property_type"),
+                        "compiled_context_snapshot": hotel_knowledge_brief,
+                    }
+                    logger.info(
+                        "hotel_knowledge_brief compiled for hotel_id=%s (%s)",
+                        data.hotel_id,
+                        hotel_doc.get("name"),
+                    )
 
-        # 1. Trigger CX Flow
-        resp_json = self._trigger_plivo_cx(to_number=data.to_number, context=context)
+        # ── Step 2: Build named Plivo params (each maps to {{Start.http.params.X}}) ─
+        plivo_params = {
+            "hotel_knowledge_brief": hotel_knowledge_brief or "No hotel selected. Respond as a general StayChat assistant.",
+            "guest_name": data.guest_name or "Guest",
+            "guest_query": data.guest_query.strip() if data.guest_query else "General enquiry.",
+        }
+
+        # ── Step 3: Also build a flat context string for DB audit log ─────────────
+        context_for_db = self._build_dynamic_context(
+            data, hotel_knowledge_brief=hotel_knowledge_brief
+        )
+
+        logger.info(
+            "Triggering Plivo CX | guest=%s | hotel_id=%s | params_keys=%s",
+            data.guest_name,
+            data.hotel_id,
+            list(plivo_params.keys()),
+        )
+
+        # ── Step 4: Trigger CX Flow with named params ─────────────────────────────
+        resp_json = self._trigger_plivo_cx(to_number=data.to_number, plivo_params=plivo_params)
         trigger_id = str(resp_json.get("api_id") or resp_json.get("trigger_id") or "")
 
-        # 2. Persist call session
+        # ── Step 5: Persist call session ──────────────────────────────────────────
         session = CallSessionModel(
             trigger_id=trigger_id,
-            username=data.username,
+            guest_name=data.guest_name,
             from_number=data.from_number,
             to_number=data.to_number,
             persona=data.persona,
-            prompt=data.prompt or "",
-            context=context,
+            guest_query=data.guest_query or "",
+            context=context_for_db,
             status=CallStatus.INITIATED,
             hotel=hotel_snapshot,
         )
@@ -146,6 +224,8 @@ class CallService:
             "message": resp_json.get("message", "CX Flow triggered successfully"),
             "data": resp_json,
         }
+
+
 
     def handle_hangup_event(self, event_data: dict):
         """

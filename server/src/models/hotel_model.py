@@ -149,93 +149,153 @@ class HotelModel(BaseModel):
 
     def compile_ai_context(self) -> str:
         """
-        Compiles the full hotel data into a rich, structured natural-language block
-        suitable for feeding directly into the voice assistant's prompt context.
+        Compiles the full hotel document (queried from ai_voice_assistant.hotels by hotel_id)
+        into a structured natural-language block. This is the `hotel_knowledge_brief` key
+        injected into the Plivo CX AI agent's system context.
+
+        Sections (in order):
+          1. Identity & Address
+          2. Timings & Policies  (check-in/out, cancellation, payments)
+          3. Accommodations & Room Rates
+          4. Dining & Restaurants
+          5. Facilities & Services
+          6. Nearby Attractions & Landmarks
+          7. Upsell Experiences  (suggest proactively)
+          8. Live Inventory Notice  (operator-updated daily)
+          9. Hotel-Specific Agent Directives  (operator AI overrides)
         """
         stars = "★" * self.star_rating
         lines = [
-            f"=== HOTEL KNOWLEDGE BASE: {self.name.upper()} ({stars}) ===",
-            f"Property: {self.name} | Type: {self.property_type.title()} | Rating: {self.star_rating}-Star",
+            f"=== [hotel_knowledge_brief] {self.name.upper()} ({stars}) ===",
+            f"Property  : {self.name}",
+            f"Type      : {self.property_type.title()} | {self.star_rating}-Star",
         ]
         if self.tagline:
-            lines.append(f"Tagline: \"{self.tagline}\"")
-        lines.append(f"Address: {self.contact.address}, {self.contact.city}")
+            lines.append(f"Tagline   : \"{self.tagline}\"")
+
+        # ── Address & Contact ─────────────────────────────────────────────────────
+        addr_parts = [self.contact.address, self.contact.city]
+        if self.contact.state:
+            addr_parts.append(self.contact.state)
+        if self.contact.country:
+            addr_parts.append(self.contact.country)
+        lines.append(f"Address   : {', '.join(addr_parts)}")
         if self.contact.phone:
-            lines.append(f"Front Desk / Concierge Phone: {self.contact.phone}")
+            lines.append(f"Phone     : {self.contact.phone}")
+        if self.contact.email:
+            lines.append(f"Email     : {self.contact.email}")
+        if self.contact.website:
+            lines.append(f"Website   : {self.contact.website}")
 
-        # Check-in / Check-out
+        # ── Timings & Policies ────────────────────────────────────────────────────
         lines.append("\n[TIMINGS & POLICIES]")
-        lines.append(f"- Check-in Time: {self.policies.check_in_time} | Check-out Time: {self.policies.check_out_time}")
+        lines.append(
+            f"- Check-in          : {self.policies.check_in_time} | "
+            f"Check-out: {self.policies.check_out_time}"
+        )
         if self.policies.early_checkin_policy:
-            lines.append(f"- Early Check-in: {self.policies.early_checkin_policy}")
+            lines.append(f"- Early Check-in    : {self.policies.early_checkin_policy}")
         if self.policies.late_checkout_policy:
-            lines.append(f"- Late Check-out: {self.policies.late_checkout_policy}")
+            lines.append(f"- Late Check-out    : {self.policies.late_checkout_policy}")
         if self.policies.cancellation_policy:
-            lines.append(f"- Cancellation: {self.policies.cancellation_policy}")
+            lines.append(f"- Cancellation      : {self.policies.cancellation_policy}")
         if self.policies.pet_policy:
-            lines.append(f"- Pet Policy: {self.policies.pet_policy}")
+            lines.append(f"- Pet Policy        : {self.policies.pet_policy}")
         if self.policies.child_policy:
-            lines.append(f"- Child Policy: {self.policies.child_policy}")
+            lines.append(f"- Child Policy      : {self.policies.child_policy}")
         if self.policies.smoking_policy:
-            lines.append(f"- Smoking: {self.policies.smoking_policy}")
+            lines.append(f"- Smoking           : {self.policies.smoking_policy}")
+        if self.policies.payment_methods:
+            lines.append(f"- Payment Accepted  : {', '.join(self.policies.payment_methods)}")
 
-        # Room Types & Rates
+        # ── Accommodations & Room Rates ───────────────────────────────────────────
         if self.room_types:
             lines.append("\n[ACCOMMODATIONS & ROOM RATES]")
             for room in self.room_types:
-                amenities_str = f" (Includes: {', '.join(room.amenities)})" if room.amenities else ""
-                desc_str = f" - {room.description}" if room.description else ""
+                amenities_str = (
+                    f" (Includes: {', '.join(room.amenities)})" if room.amenities else ""
+                )
+                desc_str = f" — {room.description}" if room.description else ""
+                capacity_str = f"Max {room.max_occupancy} guests"
+                units_str = (
+                    f", {room.total_units} units available" if room.total_units else ""
+                )
                 lines.append(
-                    f"• {room.name}: ₹{room.price_per_night_inr:,.0f}/night + taxes (Max {room.max_occupancy} guests){desc_str}{amenities_str}"
+                    f"• {room.name}: ₹{room.price_per_night_inr:,.0f}/night + taxes"
+                    f" ({capacity_str}{units_str}){desc_str}{amenities_str}"
                 )
 
-        # Dining & Food
+        # ── Dining & Food ─────────────────────────────────────────────────────────
         if self.amenities.dining:
             lines.append("\n[DINING & RESTAURANTS]")
             for d in self.amenities.dining:
                 cuisine_info = f" ({d.cuisine})" if d.cuisine else ""
                 hours_info = f" [Hours: {d.hours}]" if d.hours else ""
-                desc_info = f" - {d.description}" if d.description else ""
+                desc_info = f" — {d.description}" if d.description else ""
                 lines.append(f"• {d.name}{cuisine_info}{hours_info}{desc_info}")
         if self.amenities.has_bar and self.amenities.bar_details:
-            lines.append(f"• Bar/Lounge: {self.amenities.bar_details}")
+            lines.append(f"• Bar / Lounge: {self.amenities.bar_details}")
         if self.amenities.has_room_service:
-            lines.append(f"• In-Room Dining: Available ({self.amenities.room_service_hours or '24/7'})")
+            lines.append(
+                f"• In-Room Dining: Available "
+                f"({self.amenities.room_service_hours or '24/7'})"
+            )
 
-        # Facilities
+        # ── Facilities & Services ─────────────────────────────────────────────────
         lines.append("\n[FACILITIES & SERVICES]")
         if self.amenities.has_spa and self.amenities.spa_details:
-            lines.append(f"• Spa & Wellness: {self.amenities.spa_details}")
+            lines.append(f"• Spa & Wellness  : {self.amenities.spa_details}")
+        elif self.amenities.has_spa:
+            lines.append("• Spa & Wellness  : Available")
         if self.amenities.has_gym:
-            lines.append(f"• Fitness Center: Open ({self.amenities.gym_hours or 'Daily'})")
+            lines.append(
+                f"• Fitness Center  : Open ({self.amenities.gym_hours or 'Daily'})"
+            )
         if self.amenities.has_pool:
-            lines.append(f"• Swimming Pool: {self.amenities.pool_type or 'Available for guests'}")
+            lines.append(
+                f"• Swimming Pool   : {self.amenities.pool_type or 'Available for guests'}"
+            )
         if self.amenities.has_wifi:
-            lines.append(f"• Internet: {self.amenities.wifi_policy}")
+            lines.append(f"• Internet / WiFi : {self.amenities.wifi_policy}")
         if self.amenities.parking:
-            lines.append(f"• Parking: {self.amenities.parking}")
+            lines.append(f"• Parking         : {self.amenities.parking}")
         if self.amenities.airport_shuttle:
-            lines.append(f"• Airport Transfers: {self.amenities.airport_shuttle}")
+            lines.append(f"• Airport Transfer: {self.amenities.airport_shuttle}")
 
-        # Upsell Experiences
+        # ── Nearby Attractions ────────────────────────────────────────────────────
+        if self.nearby_attractions:
+            lines.append("\n[NEARBY ATTRACTIONS & LANDMARKS]")
+            for a in self.nearby_attractions:
+                dist = (
+                    f" ({a.distance_km:.1f} km away)" if a.distance_km is not None else ""
+                )
+                desc = f" — {a.description}" if a.description else ""
+                lines.append(f"• {a.name}{dist}{desc}")
+
+        # ── Upsell Experiences ────────────────────────────────────────────────────
         if self.upsells:
-            lines.append("\n[UPSELL EXPERIENCES & SPECIAL OFFERS TO SUGGEST]")
+            lines.append("\n[UPSELL EXPERIENCES & SPECIAL OFFERS — SUGGEST THESE PROACTIVELY]")
             for u in self.upsells:
-                desc = f" - {u.description}" if u.description else ""
-                lines.append(f"• {u.name}: ₹{u.price_inr:,.0f}{desc}")
+                desc = f" — {u.description}" if u.description else ""
+                room_scope = (
+                    f" (Available for: {', '.join(u.applicable_rooms)})"
+                    if u.applicable_rooms else ""
+                )
+                lines.append(f"• {u.name}: ₹{u.price_inr:,.0f}{desc}{room_scope}")
 
-        # Live Operational Inventory & Availability Notes
+        # ── Live Inventory Notice (operator-updated daily) ────────────────────────
         if self.inventory_notes and self.inventory_notes.strip():
-            lines.append("\n[LIVE OPERATIONAL & INVENTORY NOTICE - IMPORTANT]")
+            lines.append("\n[LIVE INVENTORY & OPERATIONAL NOTICE — CHECK BEFORE QUOTING]")
             lines.append(self.inventory_notes.strip())
 
-        # AI Agent Behavioral Instructions
+        # ── Hotel-Specific AI Directives ──────────────────────────────────────────
         if self.ai_instructions and self.ai_instructions.strip():
-            lines.append("\n[HOTEL-SPECIFIC AGENT DIRECTIVES]")
+            lines.append("\n[HOTEL-SPECIFIC AGENT DIRECTIVES — FOLLOW EXACTLY]")
             lines.append(self.ai_instructions.strip())
 
-        lines.append("=== END OF HOTEL KNOWLEDGE BASE ===")
+        lines.append("=== [end hotel_knowledge_brief] ===")
         return "\n".join(lines)
+
 
 
 class HotelListItem(BaseModel):

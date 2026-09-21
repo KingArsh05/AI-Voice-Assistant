@@ -113,8 +113,9 @@ def get_calls():
                     found_summary = ev_data.get("conversation_summary") or ev_data.get("summary")
                     if found_summary:
                         call_dict["summary"] = found_summary
-                        if "ai" in call_dict and isinstance(call_dict["ai"], dict):
-                            call_dict["ai"]["summary"] = found_summary
+            # Normalize guest_name for UI
+            call_dict["guest_name"] = call_dict.get("guest_name") or call_dict.get("username") or "Guest"
+            call_dict.pop("username", None)
 
             calls.append(call_dict)
 
