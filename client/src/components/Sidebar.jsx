@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { PhoneCall, ListFilter, Bot, Activity, PhoneIncoming, Building2 } from "lucide-react";
+import { PhoneCall, ListFilter, Bot, Activity, PhoneIncoming, Building2, ListOrdered } from "lucide-react";
 
 export default function Sidebar() {
   const navItems = [
@@ -9,6 +9,12 @@ export default function Sidebar() {
       path: "/make-call",
       icon: PhoneCall,
       badge: "AI Agent",
+    },
+    {
+      name: "Bulk Calls",
+      path: "/bulk-calls",
+      icon: ListOrdered,
+      badge: "Queue",
     },
     {
       name: "Call Logs",

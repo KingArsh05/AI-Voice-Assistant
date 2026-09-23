@@ -34,9 +34,9 @@ export default function MakeCall() {
       to_country_code: "+91",
       to_phone_number: "",
       hotel_id: "",
-      persona: "concierge",
-      guest_query:
-        "Guest has called regarding their booking. Please assist with their enquiry and assure them the team will follow up if needed.",
+      persona: "lead_followup",
+      guest_lead:
+        "Prospective guest interested in booking a room. Follow up to confirm dates, answer room and tariff questions, and assist them in finalizing their reservation.",
     },
   });
 
@@ -64,15 +64,17 @@ export default function MakeCall() {
   const onSubmit = async (data) => {
     setCallStatus({
       state: "loading",
-      message: "Triggering Plivo CX Voice Agent...",
+      message: "Triggering Plivo CX Voice Agent for Lead Follow-up...",
     });
+
+    const leadInfo = data.guest_lead?.trim() || "";
 
     const payload = {
       guest_name: data.guest_name,
       from_number: `${data.from_country_code}${data.from_phone_number}`,
       to_number: `${data.to_country_code}${data.to_phone_number}`,
-      persona: data.persona,
-      guest_query: data.guest_query,
+      persona: "lead_followup",
+      guest_lead: leadInfo,
       hotel_id: data.hotel_id || null,
     };
 
@@ -88,7 +90,7 @@ export default function MakeCall() {
       if (response.ok && resData.success) {
         setCallStatus({
           state: "success",
-          message: `Call successfully dispatched! Trigger ID: ${resData.data?.trigger_id || "Active"}`,
+          message: `Lead follow-up call successfully dispatched! Trigger ID: ${resData.data?.trigger_id || "Active"}`,
         });
       } else {
         setCallStatus({
@@ -118,11 +120,11 @@ export default function MakeCall() {
             <h1 className="text-xl font-semibold tracking-tight text-white flex items-center gap-2">
               StayChat Voice Agent
               <span className="text-[11px] font-medium tracking-wide uppercase px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                Live
+                Lead Follow-up
               </span>
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">
-              Initiate instant AI-powered phone conversations via Plivo
+              Outbound AI voice agent calling potential guests to nurture & convert booking leads
             </p>
           </div>
         </div>
@@ -131,10 +133,10 @@ export default function MakeCall() {
           <form onSubmit={methods.handleSubmit(onSubmit)} className="space-y-4">
             <InputField
               name="guest_name"
-              label="Guest Name (Person You're Calling)"
-              placeholder="e.g. Arsh, Ravi, Priya"
-              helperText="The guest's name — the AI will greet and address them by this name during the call"
-              rules={{ required: "Guest name is required" }}
+              label="Guest / Lead Name (Potential Customer)"
+              placeholder="e.g. Arsh, Ravi Sharma, Priya Patel"
+              helperText="The potential customer's name — the AI will greet them warmly by name to discuss their booking"
+              rules={{ required: "Guest lead name is required" }}
             />
 
 
@@ -149,22 +151,26 @@ export default function MakeCall() {
             <PhoneInputField
               countryCodeName="to_country_code"
               phoneName="to_phone_number"
-              label="To (Destination Number)"
+              label="To (Guest's Phone Number)"
               placeholder="9876543210"
-              helperText="Phone number of the customer named above — the AI will call this number"
+              helperText="Phone number of the prospective customer — the AI will call to follow up on their reservation"
             />
 
-            <SelectField
-              name="persona"
-              label="AI Assistant Persona"
-              placeholder=""
-              options={[
-                { value: "concierge", label: "Hotel / Booking Concierge" },
-                { value: "support", label: "Customer Support Agent" },
-                { value: "sales", label: "Lead Qualification & Sales" },
-                { value: "feedback", label: "Post-Stay Feedback Collector" },
-              ]}
-            />
+            {/* AI Assistant Persona - Fixed / Specialized for Lead Follow-up */}
+            <div className="p-3.5 bg-slate-950/60 border border-slate-800/80 rounded-2xl space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Bot className="w-3.5 h-3.5 text-indigo-400" />
+                  AI Agent Persona
+                </span>
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/25">
+                  Hotel Booking & Lead Follow-up Concierge
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Trained specifically to call prospective hotel guests, take follow-ups on room requirements, quote accurate room tariffs, and assist in securing confirmed reservations.
+              </p>
+            </div>
 
             {/* Hotel Knowledge Base Selector */}
             <div className="space-y-2">
@@ -217,11 +223,11 @@ export default function MakeCall() {
 
 
             <TextareaField
-              name="guest_query"
-              label="Customer Query"
+              name="guest_lead"
+              label="Guest Lead & Booking Interest"
               rows={3}
-              placeholder="Describe the guest's issue or reason for the call — e.g. 'Guest is asking about early check-in and room upgrade availability.'"
-              helperText="Describe what the guest is asking about — the AI uses this to understand the purpose of the call"
+              placeholder="Describe the lead's booking requirements — e.g. 'Guest expressed interest in a Deluxe room for 2 nights next weekend. Inquired about breakfast inclusions and extra bed options. Follow up to answer queries and close booking.'"
+              helperText="Context about what this prospective customer is looking for — the AI uses this to take tailored follow-ups and convert the lead"
             />
 
             {callStatus.state !== "idle" && (

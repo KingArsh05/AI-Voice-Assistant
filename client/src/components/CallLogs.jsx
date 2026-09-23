@@ -492,12 +492,27 @@ export default function CallLogs() {
                 </div>
 
                 {/* 4. Injected Context Prompt (Clean Collapsible Display) */}
+                {selectedCall.guest_lead && (
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-indigo-300">
+                        <Tag className="w-3.5 h-3.5 text-indigo-400" />
+                        Guest Booking Lead Details
+                      </span>
+                    </h4>
+                    <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 text-xs text-slate-200 leading-relaxed">
+                      {selectedCall.guest_lead}
+                    </div>
+                  </div>
+                )}
+
+                {/* Prompt & Injected Context */}
                 {selectedCall.context && (
                   <div className="space-y-2">
                     <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between">
                       <span className="flex items-center gap-1.5">
                         <Tag className="w-3.5 h-3.5 text-indigo-400" />
-                        Prompt & Injected Context
+                        System Injected Context & Rules
                       </span>
                       <button
                         onClick={() => handleCopy(selectedCall.context, "context")}

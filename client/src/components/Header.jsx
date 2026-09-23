@@ -17,7 +17,7 @@ export default function Header() {
       default:
         return {
           title: "Initiate Voice Agent",
-          description: "Trigger Plivo CX Outbound Flow with dynamic context and personas",
+          description: "Trigger Plivo CX Outbound Flow for hotel guest leads and booking follow-ups",
         };
     }
   };

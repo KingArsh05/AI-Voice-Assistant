@@ -102,14 +102,14 @@ class CallSessionModel(BaseModel):
     flow_name: Optional[str] = None
 
     # 2. Telephony
-    guest_name: str = Field(..., min_length=1, max_length=100, description="The guest being called")
+    guest_name: str = Field(..., min_length=1, max_length=100, description="The prospective guest / lead being called")
     from_number: str = Field(..., pattern=r"^\+[1-9]\d{7,14}$")
     to_number: str = Field(..., pattern=r"^\+[1-9]\d{7,14}$")
     from_country: Optional[str] = None
     to_country: Optional[str] = None
     direction: str = "outbound"
-    persona: str = "support"
-    guest_query: Optional[str] = ""
+    persona: str = "lead_followup"
+    guest_lead: Optional[str] = ""
     context: Optional[str] = ""
     hotel: Optional[dict] = Field(
         default=None,
@@ -133,6 +133,7 @@ class CallSessionModel(BaseModel):
         data = self.model_dump()
         # Flat aliases for frontend UI compatibility
         data["request_uuid"] = self.trigger_id
+        data["guest_lead"] = self.guest_lead or ""
         data["duration"] = self.termination.duration_seconds
         data["hangup_source"] = self.termination.source.value
         data["hangup_cause"] = self.termination.reason

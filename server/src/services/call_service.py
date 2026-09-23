@@ -64,21 +64,24 @@ class CallService:
                 + hotel_knowledge_brief.strip()
             )
 
-        # ── Section 2: guest_profile ──────────────────────────────────────────────
-        # Clearly identifies the guest and their specific issue/query.
-        guest_lines = []
+        # ── Section 2: lead_profile ──────────────────────────────────────────────
+        # Clearly identifies the potential guest (lead) and their booking inquiry/interest.
+        lead_info = (data.guest_lead or "").strip()
+        lead_lines = []
         if data.guest_name:
-            guest_lines.append(f"Guest Name : {data.guest_name}")
-        if data.guest_query:
-            guest_lines.append(f"Guest Query: {data.guest_query.strip()}")
+            lead_lines.append(f"Prospective Guest / Lead Name : {data.guest_name}")
+        if lead_info:
+            lead_lines.append(f"Booking Inquiry / Lead Details: {lead_info}")
 
-        if guest_lines:
+        if lead_lines:
             parts.append(
-                "=== [guest_profile] ===\n"
-                + "\n".join(guest_lines) + "\n\n"
-                "Address the guest by their name throughout the call. "
-                "Focus the conversation on resolving the Guest Query above. "
-                "If the guest raises additional questions, answer them using the hotel_knowledge_brief."
+                "=== [lead_profile] ===\n"
+                + "\n".join(lead_lines) + "\n\n"
+                "OBJECTIVE: This is a proactive hotel booking follow-up call to a prospective guest (lead).\n"
+                "1. Greet the guest warmly by their name and mention you are following up on their booking inquiry.\n"
+                "2. Understand their travel dates, number of guests, and room type preferences.\n"
+                "3. Use the [hotel_knowledge_brief] to share accurate room details, rates, amenities, and policies.\n"
+                "4. Answer any questions or doubts they have, highlight relevant perks or experiences, and assist them in finalizing their room reservation."
             )
 
         # ── Section 3: call_boundaries (hard guardrails) ─────────────────────────
@@ -88,7 +91,7 @@ class CallService:
         if data.guest_name:
             boundaries.append(
                 f"RULE — GREETING: Always begin the call by greeting {data.guest_name} by name "
-                f"(e.g. 'Hello {data.guest_name}, this is StayChat calling.'). "
+                f"(e.g. 'Hello {data.guest_name}, this is StayChat calling regarding your hotel booking inquiry.'). "
                 "Never start with a generic 'Hello' or 'Hi there'."
             )
 
@@ -96,18 +99,18 @@ class CallService:
             "RULE — NO TRANSFERS: You CANNOT transfer, forward, or connect this call to any "
             "person, department, or team. Do not promise or imply a call transfer. "
             "Instead, acknowledge the guest's concern, assist where you can from the "
-            "hotel_knowledge_brief, and assure them the relevant team will follow up shortly."
+            "hotel_knowledge_brief, and assure them our reservations team will confirm all details."
         )
 
         boundaries.append(
             "RULE — STAY ON-TOPIC: Only answer questions using information from the "
-            "hotel_knowledge_brief and Guest Query above. If you genuinely do not know, say: "
-            "'I don't have that detail right now, but our team will follow up with you.'"
+            "hotel_knowledge_brief and Lead Details above. If you genuinely do not know, say: "
+            "'I don't have that specific detail right now, but our reservation desk will follow up with you.'"
         )
 
         parts.append("=== [call_boundaries] ===\n" + "\n\n".join(boundaries))
 
-        return "\n\n".join(parts) if parts else "You are a helpful AI assistant for StayChat."
+        return "\n\n".join(parts) if parts else "You are a professional hotel reservation and lead follow-up specialist for StayChat."
 
     def _trigger_plivo_cx(self, to_number: str, plivo_params: dict) -> dict:
         """
@@ -118,8 +121,8 @@ class CallService:
 
           to_number             → the destination phone number
           hotel_knowledge_brief → compiled hotel data from ai_voice_assistant.hotels
-          guest_name            → the person being called (used for greeting)
-          guest_query           → the guest's specific issue / reason for the call
+          guest_name            → the prospective guest being called (used for greeting)
+          guest_lead            → the guest's booking lead / follow-up details
         """
         payload_dict = {"to_number": to_number, **plivo_params}
         payload = json.dumps(payload_dict).encode("utf-8")
@@ -151,10 +154,10 @@ class CallService:
         """
         Triggers Plivo CX Flow and saves the initiated session in MongoDB.
 
-        Sends 4 named variables to Plivo CX (accessible as {{Start.http.params.<key>}}):
+        Sends named variables to Plivo CX (accessible as {{Start.http.params.<key>}}):
           • hotel_knowledge_brief  — full hotel data compiled from ai_voice_assistant.hotels
           • guest_name             — the person being called
-          • guest_query            — the guest's specific issue or enquiry
+          • guest_lead             — the prospective guest's booking enquiry & follow-up details
         """
         hotel_snapshot = None
         hotel_knowledge_brief = None
@@ -182,10 +185,14 @@ class CallService:
                     )
 
         # ── Step 2: Build named Plivo params (each maps to {{Start.http.params.X}}) ─
+        lead_content = (data.guest_lead or "").strip()
+        if not lead_content:
+            lead_content = "Prospective guest interested in booking. Follow up to answer room questions and assist in confirming reservation."
+
         plivo_params = {
-            "hotel_knowledge_brief": hotel_knowledge_brief or "No hotel selected. Respond as a general StayChat assistant.",
+            "hotel_knowledge_brief": hotel_knowledge_brief or "No hotel selected. Respond as a general StayChat hotel booking assistant.",
             "guest_name": data.guest_name or "Guest",
-            "guest_query": data.guest_query.strip() if data.guest_query else "General enquiry.",
+            "guest_lead": lead_content,
         }
 
         # ── Step 3: Also build a flat context string for DB audit log ─────────────
@@ -210,8 +217,8 @@ class CallService:
             guest_name=data.guest_name,
             from_number=data.from_number,
             to_number=data.to_number,
-            persona=data.persona,
-            guest_query=data.guest_query or "",
+            persona=data.persona or "lead_followup",
+            guest_lead=lead_content,
             context=context_for_db,
             status=CallStatus.INITIATED,
             hotel=hotel_snapshot,
