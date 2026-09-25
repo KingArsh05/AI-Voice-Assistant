@@ -173,6 +173,11 @@ class HotelModel(BaseModel):
         if self.tagline:
             lines.append(f"Tagline   : \"{self.tagline}\"")
 
+        # ── Hotel-Specific AI Directives (Priority 1: Placed on top so instructions are never missed)
+        if self.ai_instructions and self.ai_instructions.strip():
+            lines.append("\n[CRITICAL OPERATIONAL & LANGUAGE DIRECTIVES — FOLLOW EXACTLY]")
+            lines.append(self.ai_instructions.strip())
+
         # ── Address & Contact ─────────────────────────────────────────────────────
         addr_parts = [self.contact.address, self.contact.city]
         if self.contact.state:
@@ -287,11 +292,6 @@ class HotelModel(BaseModel):
         if self.inventory_notes and self.inventory_notes.strip():
             lines.append("\n[LIVE INVENTORY & OPERATIONAL NOTICE — CHECK BEFORE QUOTING]")
             lines.append(self.inventory_notes.strip())
-
-        # ── Hotel-Specific AI Directives ──────────────────────────────────────────
-        if self.ai_instructions and self.ai_instructions.strip():
-            lines.append("\n[HOTEL-SPECIFIC AGENT DIRECTIVES — FOLLOW EXACTLY]")
-            lines.append(self.ai_instructions.strip())
 
         lines.append("=== [end hotel_knowledge_brief] ===")
         return "\n".join(lines)

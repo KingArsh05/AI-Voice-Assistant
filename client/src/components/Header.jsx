@@ -12,6 +12,16 @@ export default function Header() {
           title: "Call Logs & Transcriptions",
           description: "Inspect live calls, recording playback, agent summaries & webhooks",
         };
+      case "/bulk-calls":
+        return {
+          title: "Bulk Call Campaigns",
+          description: "Automated sequential AI calling pipeline with live status tracking",
+        };
+      case "/hotels":
+        return {
+          title: "Hotel Knowledge Bases",
+          description: "Manage hotel room tiers, amenities, check-in policies & AI prompts",
+        };
       case "/make-call":
       case "/":
       default:

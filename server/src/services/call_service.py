@@ -3,12 +3,18 @@ import logging
 import base64
 import urllib.request
 import urllib.error
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from typing import Optional
 import plivo
 from src.config import Config
 from src.db.connection import get_db
 from src.models.call_model import CallRecord, InitiateCallRequest
 from src.models.call_session_model import CallSessionModel, CallStatus
+from src.services.lead_guardrails import (
+    sanitize_guest_name,
+    validate_lead_content,
+    clean_lead_for_ai,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +43,7 @@ class CallService:
         hotel_svc = HotelService()
         return hotel_svc.get_compiled_context(hotel_id)
 
-    def _build_dynamic_context(self, data: InitiateCallRequest, hotel_knowledge_brief: Optional[str] = None) -> str:
+    def _build_dynamic_context(self, data: InitiateCallRequest, hotel_knowledge_brief: Optional[str] = None, hotel_name: str = "Hotel Reservations") -> str:
         """Assembles the structured dynamic context payload injected into the Plivo CX AI Agent.
 
         Structure (three clearly labelled sections):
@@ -91,8 +97,9 @@ class CallService:
         if data.guest_name:
             boundaries.append(
                 f"RULE — GREETING: Always begin the call by greeting {data.guest_name} by name "
-                f"(e.g. 'Hello {data.guest_name}, this is StayChat calling regarding your hotel booking inquiry.'). "
-                "Never start with a generic 'Hello' or 'Hi there'."
+                f"and introducing yourself from {hotel_name} "
+                f"(e.g. 'Namaste {data.guest_name} ji, main {hotel_name} se bol rahi hoon.'). "
+                "Never start with a generic 'Hello' or 'Hi there'. Default language is Hindi/Hinglish."
             )
 
         boundaries.append(
@@ -120,9 +127,10 @@ class CallService:
         each one individually via {{Start.http.params.<key>}}:
 
           to_number             → the destination phone number
+          hotel_name            → the exact property name (e.g. Hotel Sahu)
           hotel_knowledge_brief → compiled hotel data from ai_voice_assistant.hotels
-          guest_name            → the prospective guest being called (used for greeting)
-          guest_lead            → the guest's booking lead / follow-up details
+          guest_name            → the prospective guest being called (sanitized)
+          guest_lead            → cleaned booking enquiry details (operator meta-instructions stripped)
         """
         payload_dict = {"to_number": to_number, **plivo_params}
         payload = json.dumps(payload_dict).encode("utf-8")
@@ -150,60 +158,98 @@ class CallService:
             raise RuntimeError(f"Plivo API returned {e.code}: {err_msg}")
 
 
-    def make_call(self, data: InitiateCallRequest) -> dict:
+    def check_recent_calls(self, to_number: str, cooldown_minutes: int = 15) -> bool:
+        """
+        Checks if the destination phone was called recently within cooldown_minutes
+        (ignoring failed connection attempts) to prevent duplicate harassment.
+        """
+        if not to_number:
+            return False
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=cooldown_minutes)
+        existing = self.db.calls.find_one({
+            "to_number": to_number,
+            "created_at": {"$gte": cutoff},
+            "status": {"$nin": ["failed", CallStatus.FAILED.value]},
+        })
+        return existing is not None
+
+    def make_call(self, data: InitiateCallRequest, bypass_dedup: bool = False) -> dict:
         """
         Triggers Plivo CX Flow and saves the initiated session in MongoDB.
 
         Sends named variables to Plivo CX (accessible as {{Start.http.params.<key>}}):
+          • hotel_name             — exact property name (e.g. Hotel Sahu)
           • hotel_knowledge_brief  — full hotel data compiled from ai_voice_assistant.hotels
-          • guest_name             — the person being called
-          • guest_lead             — the prospective guest's booking enquiry & follow-up details
+          • guest_name             — the person being called (sanitized)
+          • guest_lead             — sanitized, structured booking enquiry details
         """
+        # ── Step 0: Lead Content Validation & Name Sanitization ───────────────────
+        is_valid, rejection_reason = validate_lead_content(data.guest_lead or "")
+        if not is_valid:
+            logger.error("Rejecting call to %s due to prohibited lead content: %s", data.to_number, rejection_reason)
+            raise ValueError(f"Prohibited lead content: {rejection_reason}")
+
+        cleaned_guest_name, name_warnings = sanitize_guest_name(data.guest_name or "")
+        if name_warnings:
+            logger.warning("Sanitized guest name '%s' -> '%s': %s", data.guest_name, cleaned_guest_name, name_warnings)
+
+        # ── Step 0.5: Deduplication Check ─────────────────────────────────────────
+        if not bypass_dedup and self.check_recent_calls(data.to_number, cooldown_minutes=15):
+            msg = f"Duplicate call blocked: {data.to_number} was already called within the last 15 minutes."
+            logger.warning(msg)
+            raise ValueError(msg)
+
         hotel_snapshot = None
         hotel_knowledge_brief = None
+        hotel_name = "Hotel Reservations"
 
-        # ── Step 1: Compile hotel_knowledge_brief from DB ─────────────────────────
+        # ── Step 1: Compile hotel_knowledge_brief from DB (Fail-Safe) ─────────────
         if data.hotel_id:
+            from src.services.hotel_service import HotelService
+            hotel_svc = HotelService()
+            hotel_doc = hotel_svc.get_hotel(data.hotel_id)
+            if not hotel_doc:
+                raise ValueError(f"Hotel with ID '{data.hotel_id}' not found or inactive. Cannot initiate call without property context.")
+
+            hotel_name = hotel_doc.get("name", "Hotel Reservations")
             hotel_knowledge_brief = self.build_hotel_knowledge_brief(data.hotel_id)
+            if not hotel_knowledge_brief:
+                raise ValueError(f"Failed to compile AI knowledge brief for hotel '{hotel_name}' ({data.hotel_id}).")
 
-            if hotel_knowledge_brief:
-                from src.services.hotel_service import HotelService
-                hotel_svc = HotelService()
-                hotel_doc = hotel_svc.get_hotel(data.hotel_id)
-                if hotel_doc:
-                    hotel_snapshot = {
-                        "hotel_id": data.hotel_id,
-                        "name": hotel_doc.get("name"),
-                        "star_rating": hotel_doc.get("star_rating"),
-                        "property_type": hotel_doc.get("property_type"),
-                        "compiled_context_snapshot": hotel_knowledge_brief,
-                    }
-                    logger.info(
-                        "hotel_knowledge_brief compiled for hotel_id=%s (%s)",
-                        data.hotel_id,
-                        hotel_doc.get("name"),
-                    )
+            hotel_snapshot = {
+                "hotel_id": data.hotel_id,
+                "name": hotel_name,
+                "star_rating": hotel_doc.get("star_rating"),
+                "property_type": hotel_doc.get("property_type"),
+                "compiled_context_snapshot": hotel_knowledge_brief,
+            }
+            logger.info(
+                "hotel_knowledge_brief compiled for hotel_id=%s (%s)",
+                data.hotel_id,
+                hotel_name,
+            )
 
-        # ── Step 2: Build named Plivo params (each maps to {{Start.http.params.X}}) ─
-        lead_content = (data.guest_lead or "").strip()
-        if not lead_content:
-            lead_content = "Prospective guest interested in booking. Follow up to answer room questions and assist in confirming reservation."
+        # ── Step 2: Build AI-clean lead content & named Plivo params ──────────────
+        lead_content = clean_lead_for_ai(data.guest_lead, hotel_name=hotel_name)
 
         plivo_params = {
-            "hotel_knowledge_brief": hotel_knowledge_brief or "No hotel selected. Respond as a general StayChat hotel booking assistant.",
-            "guest_name": data.guest_name or "Guest",
+            "hotel_name": hotel_name,
+            "hotel_knowledge_brief": hotel_knowledge_brief or f"{hotel_name} reservation specialist. Answer questions politely.",
+            "guest_name": cleaned_guest_name,
             "guest_lead": lead_content,
         }
 
-        # ── Step 3: Also build a flat context string for DB audit log ─────────────
+        # ── Step 3: Build flat context string for DB audit log ────────────────────
+        # Update request object with cleaned values for context building
+        clean_request_data = data.model_copy(update={"guest_name": cleaned_guest_name, "guest_lead": lead_content})
         context_for_db = self._build_dynamic_context(
-            data, hotel_knowledge_brief=hotel_knowledge_brief
+            clean_request_data, hotel_knowledge_brief=hotel_knowledge_brief, hotel_name=hotel_name
         )
 
         logger.info(
-            "Triggering Plivo CX | guest=%s | hotel_id=%s | params_keys=%s",
-            data.guest_name,
-            data.hotel_id,
+            "Triggering Plivo CX | guest=%s | hotel=%s | params_keys=%s",
+            cleaned_guest_name,
+            hotel_name,
             list(plivo_params.keys()),
         )
 
@@ -214,7 +260,7 @@ class CallService:
         # ── Step 5: Persist call session ──────────────────────────────────────────
         session = CallSessionModel(
             trigger_id=trigger_id,
-            guest_name=data.guest_name,
+            guest_name=cleaned_guest_name,
             from_number=data.from_number,
             to_number=data.to_number,
             persona=data.persona or "lead_followup",

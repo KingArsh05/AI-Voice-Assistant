@@ -35,6 +35,9 @@ def initiate_call():
         print("="*50 + "\n")
 
         return jsonify({"success": True, "data": result}), 201
+    except ValueError as ve:
+        logger.warning("Initiate call validation error: %s", ve)
+        return jsonify({"success": False, "message": str(ve)}), 400
     except Exception as e:
         logger.exception("Error initiating call: %s", e)
         return jsonify({"success": False, "message": str(e)}), 500

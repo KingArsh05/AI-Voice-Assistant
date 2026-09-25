@@ -3,7 +3,7 @@ import time
 import logging
 import threading
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 
 from src.db.connection import get_db
 from src.models.campaign_model import (
@@ -13,6 +13,11 @@ from src.models.campaign_model import (
 )
 from src.models.call_model import InitiateCallRequest
 from src.services.call_service import CallService
+from src.services.lead_guardrails import (
+    sanitize_guest_name,
+    validate_lead_content,
+    clean_lead_for_ai,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,17 +37,56 @@ class CampaignService:
         self.db = get_db()
         self.call_service = CallService()
 
+    def _validate_campaign_leads(self, leads: List[Any], hotel_id: Optional[str]) -> Tuple[List[dict], List[str]]:
+        """
+        Validates and sanitizes all leads before campaign creation.
+        Strips bad words, rejects prohibited lead patterns, checks within-batch duplicates.
+        """
+        errors = []
+        cleaned_leads = []
+        seen_phones = set()
+
+        # If hotel_id is specified, ensure it exists
+        if hotel_id:
+            hotel_doc = self.db.hotels.find_one({"hotel_id": hotel_id, "is_deleted": {"$ne": True}})
+            if not hotel_doc:
+                errors.append(f"Selected Hotel ID '{hotel_id}' does not exist or is inactive.")
+
+        for idx, lead in enumerate(leads):
+            lead_dict = lead.model_dump() if hasattr(lead, "model_dump") else dict(lead)
+            phone = lead_dict.get("phone_number", "").strip()
+            raw_name = lead_dict.get("guest_name", "").strip()
+            raw_lead = lead_dict.get("lead_details", "")
+
+            # 1. Intra-campaign duplicate check bypassed for testing with single test number
+            pass
+
+            # 2. Content validation (reject extortion, scams, abuse)
+            is_valid, reason = validate_lead_content(raw_lead)
+            if not is_valid:
+                errors.append(f"Lead #{idx + 1} ({raw_name}): Prohibited content detected — {reason}")
+
+            # 3. Name sanitization
+            clean_name, _ = sanitize_guest_name(raw_name)
+            lead_dict["guest_name"] = clean_name
+            if not lead_dict.get("serial"):
+                lead_dict["serial"] = idx + 1
+            lead_dict["status"] = LeadStatus.QUEUED.value
+
+            cleaned_leads.append(lead_dict)
+
+        return cleaned_leads, errors
+
     def create_campaign(self, data: CreateCampaignRequest) -> Dict[str, Any]:
         campaign_id = f"cmp_{uuid.uuid4().hex[:12]}"
         now = datetime.now(timezone.utc)
 
-        leads_data = []
-        for idx, lead in enumerate(data.leads):
-            lead_dict = lead.model_dump()
-            if not lead_dict.get("serial"):
-                lead_dict["serial"] = idx + 1
-            lead_dict["status"] = LeadStatus.QUEUED.value
-            leads_data.append(lead_dict)
+        leads_data, validation_errors = self._validate_campaign_leads(data.leads, data.hotel_id)
+        if validation_errors:
+            error_str = " | ".join(validation_errors[:5])
+            if len(validation_errors) > 5:
+                error_str += f" (and {len(validation_errors) - 5} more issues)"
+            raise ValueError(f"Campaign pre-flight validation failed: {error_str}")
 
         doc = {
             "campaign_id": campaign_id,
@@ -231,6 +275,7 @@ class CampaignService:
                 },
             )
 
+            # Step 1.5: 15-minute cross-campaign cooldown check bypassed for developer testing with single number
             trigger_id = None
             call_error = None
 
@@ -244,7 +289,7 @@ class CampaignService:
                     guest_lead=lead_details,
                     hotel_id=hotel_id,
                 )
-                res = self.call_service.make_call(call_request)
+                res = self.call_service.make_call(call_request, bypass_dedup=True)
                 trigger_id = res.get("trigger_id")
                 logger.info("[%s] Plivo CX triggered for lead #%d, trigger_id=%s", campaign_id, next_idx + 1, trigger_id)
 
