@@ -8,14 +8,19 @@ import BulkLeadsPreview from "./bulk/BulkLeadsPreview";
 import BulkCampaignConfig from "./bulk/BulkCampaignConfig";
 import BulkRecentHistory from "./bulk/BulkRecentHistory";
 import BulkLiveDashboard from "./bulk/BulkLiveDashboard";
+import BulkPageSkeleton from "./bulk/BulkPageSkeleton";
 import { validateLead } from "../utils/leadValidation";
 
 const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export default function BulkCalls() {
+  // Page initialization loading state (prevents layout jumping/resizing)
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+
   // Campaign setup state
   const [hotels, setHotels] = useState([]);
   const [isLoadingHotels, setIsLoadingHotels] = useState(false);
+  const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(false);
 
   // File parsing & preview state
   const [parsedLeads, setParsedLeads] = useState([]);
@@ -46,10 +51,14 @@ export default function BulkCalls() {
   const selectedHotelId = methods.watch("hotel_id");
   const selectedHotel = hotels.find((h) => h.hotel_id === selectedHotelId);
 
-  // Fetch hotels and past campaigns on mount
+  // Fetch hotels and past campaigns concurrently on mount, wait for completion before rendering
   useEffect(() => {
-    fetchHotels();
-    fetchCampaignsList();
+    const initData = async () => {
+      setIsInitialLoading(true);
+      await Promise.allSettled([fetchHotels(), fetchCampaignsList()]);
+      setIsInitialLoading(false);
+    };
+    initData();
   }, []);
 
   // Polling loop when a campaign is active
@@ -81,6 +90,7 @@ export default function BulkCalls() {
   };
 
   const fetchCampaignsList = async () => {
+    setIsLoadingCampaigns(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/v1/campaigns?limit=15`);
       const data = await res.json();
@@ -89,6 +99,8 @@ export default function BulkCalls() {
       }
     } catch (err) {
       console.error("Failed to load campaigns list:", err);
+    } finally {
+      setIsLoadingCampaigns(false);
     }
   };
 
@@ -297,18 +309,20 @@ export default function BulkCalls() {
   const invalidLeadsCount = parsedLeads.length - validLeadsCount;
 
   return (
-    <div className="flex-1 flex flex-col h-full min-h-0 p-6 lg:p-8 max-w-7xl mx-auto w-full overflow-hidden animate-in fade-in duration-300">
+    <div className="flex-1 flex flex-col h-full min-h-0 p-6 lg:p-8 max-w-7xl mx-auto w-full overflow-hidden">
       {/* Dynamic ambient backdrop */}
       <div className="absolute top-10 left-1/3 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -z-10" />
 
-      {/* Main Content Area */}
-      {!campaign ? (
+      {/* Main Content Area: Show comprehensive page skeleton while initial data loads */}
+      {isInitialLoading ? (
+        <BulkPageSkeleton />
+      ) : !campaign ? (
         <FormProvider {...methods}>
           <form
             onSubmit={methods.handleSubmit(handleCreateCampaign)}
-            className="flex-1 flex flex-col min-h-0 gap-6"
+            className="flex-1 flex flex-col min-h-0 gap-6 animate-in fade-in duration-300"
           >
-            {/* Main 2-column split (Fills screen with comfortable margins & padding) */}
+            {/* Main 2-column split (Fills screen with stable proportions) */}
             <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0 overflow-hidden">
               {/* Left Column (7 cols): Upload + Parsed Leads Preview */}
               <div className="lg:col-span-7 flex flex-col gap-6 min-h-0 overflow-hidden">
@@ -358,6 +372,7 @@ export default function BulkCalls() {
             {/* Bottom Row: Recent Campaigns Strip */}
             <BulkRecentHistory
               campaignsList={campaignsList}
+              isLoading={isLoadingCampaigns}
               onSelectCampaign={handleSelectCampaign}
             />
           </form>

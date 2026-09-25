@@ -1,11 +1,33 @@
 import React from "react";
-import { History, ChevronRight } from "lucide-react";
+import { History, ChevronRight, Inbox } from "lucide-react";
+import BulkRecentHistorySkeleton from "./BulkRecentHistorySkeleton";
 
 export default function BulkRecentHistory({
   campaignsList = [],
+  isLoading = false,
   onSelectCampaign,
 }) {
-  if (!campaignsList || campaignsList.length === 0) return null;
+  if (isLoading) {
+    return <BulkRecentHistorySkeleton />;
+  }
+
+  if (!campaignsList || campaignsList.length === 0) {
+    return (
+      <div className="bg-slate-900/60 border border-slate-800/80 rounded-3xl p-5 backdrop-blur-xl shadow-xl shrink-0">
+        <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800/60">
+          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+            <History className="w-4 h-4 text-indigo-400" />
+            Recent Batches History
+          </h3>
+          <span className="text-xs text-slate-500">0 recorded</span>
+        </div>
+        <div className="py-4 flex items-center justify-center gap-2 text-slate-500 text-xs">
+          <Inbox className="w-4 h-4" />
+          <span>No previous bulk campaigns yet. Newly launched batches will appear here.</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-slate-900/60 border border-slate-800/80 rounded-3xl p-5 backdrop-blur-xl shadow-xl shrink-0">

@@ -63,9 +63,19 @@ export default function BulkCampaignConfig({
 
         {/* Hotel Knowledge Base Selector */}
         <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-slate-200">
+              Hotel Knowledge Base
+            </label>
+            {isLoadingHotels && (
+              <span className="text-[10px] text-indigo-400 flex items-center gap-1">
+                <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                Syncing properties...
+              </span>
+            )}
+          </div>
           <SelectField
             name="hotel_id"
-            label="Hotel Knowledge Base"
             placeholder={isLoadingHotels ? "Loading verified hotels..." : "-- Select Property --"}
             options={[
               { value: "", label: "No Hotel (Generic StayChat AI Assistant)" },
