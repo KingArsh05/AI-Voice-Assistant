@@ -36,7 +36,7 @@ class CRMService:
         limit: int = 100,
         skip: int = 0,
     ) -> List[Dict[str, Any]]:
-        query: Dict[str, Any] = {"is_deleted": {"": True}}
+        query: Dict[str, Any] = {"is_deleted": {"$ne": True}}
 
         if hotel_id:
             query["hotel_id"] = hotel_id
@@ -45,36 +45,22 @@ class CRMService:
         if source:
             query["source"] = source
         if search:
-            query[""] = [
-                {
-                    "guest_name": {
-                        "": search,
-                        "off on off off off off off off off off on off on off off off off off on off off off on on off off off off on off off off off off off off off off off off off on off off off off off off off on off on on off off off on off off on off off on off off on off on off off on off on off off off off on off off off on off off on off off off off off off off off on off on off off on off off off off off off off off off off off off on off off off on off on off on on off off off off on on off off on on off on off on on off off off off on on off off on off off off off off on off off on off off on off off off off off off on off off off off on on off on off off off off off on off on off off off off off off off off off off on on off on off off off": "i",
-                    }
-                },
-                {
-                    "phone_number": {
-                        "": search,
-                        "off on off off off off off off off off on off on off off off off off on off off off on on off off off off on off off off off off off off off off off off off on off off off off off off off on off on on off off off on off off on off off on off off on off on off off on off on off off off off on off off off on off off on off off off off off off off off on off on off off on off off off off off off off off off off off off on off off off on off on off on on off off off off on on off off on on off on off on on off off off off on on off off on off off off off off on off off on off off on off off off off off off on off off off off on on off on off off off off off on off on off off off off off off off off off off on on off on off off off": "i",
-                    }
-                },
-                {
-                    "lead_details": {
-                        "": search,
-                        "off on off off off off off off off off on off on off off off off off on off off off on on off off off off on off off off off off off off off off off off off on off off off off off off off on off on on off off off on off off on off off on off off on off on off off on off on off off off off on off off off on off off on off off off off off off off off on off on off off on off off off off off off off off off off off off on off off off on off on off on on off off off off on on off off on on off on off on on off off off off on on off off on off off off off off on off off on off off on off off off off off off on off off off off on on off on off off off off off on off on off off off off off off off off off off on on off on off off off": "i",
-                    }
-                },
+            regex_query = {"$regex": search, "$options": "i"}
+            query["$or"] = [
+                {"guest_name": regex_query},
+                {"phone_number": regex_query},
+                {"lead_details": regex_query},
             ]
         if date_from or date_to:
             dt_filter = {}
             if date_from:
                 try:
-                    dt_filter[""] = datetime.fromisoformat(date_from)
+                    dt_filter["$gte"] = datetime.fromisoformat(date_from)
                 except Exception:
                     pass
             if date_to:
                 try:
-                    dt_filter[""] = datetime.fromisoformat(date_to)
+                    dt_filter["$lte"] = datetime.fromisoformat(date_to)
                 except Exception:
                     pass
             if dt_filter:
@@ -86,7 +72,7 @@ class CRMService:
         return [self._format_lead(doc) for doc in cursor]
 
     def get_lead(self, lead_id: str) -> Optional[Dict[str, Any]]:
-        doc = self.db.crm_leads.find_one({"lead_id": lead_id, "is_deleted": {"": True}})
+        doc = self.db.crm_leads.find_one({"lead_id": lead_id, "is_deleted": {"$ne": True}})
         return self._format_lead(doc) if doc else None
 
     def create_lead(self, data: CreateCRMLeadRequest) -> Dict[str, Any]:
@@ -138,13 +124,13 @@ class CRMService:
         if not updates:
             return self.get_lead(lead_id)
         updates["updated_at"] = datetime.now(timezone.utc)
-        self.db.crm_leads.update_one({"lead_id": lead_id}, {"": updates})
+        self.db.crm_leads.update_one({"lead_id": lead_id}, {"$set": updates})
         return self.get_lead(lead_id)
 
     def delete_lead(self, lead_id: str) -> bool:
         res = self.db.crm_leads.update_one(
             {"lead_id": lead_id},
-            {"": {"is_deleted": True, "updated_at": datetime.now(timezone.utc)}},
+            {"$set": {"is_deleted": True, "updated_at": datetime.now(timezone.utc)}},
         )
         return res.matched_count > 0
 
@@ -152,7 +138,7 @@ class CRMService:
         now = datetime.now(timezone.utc)
         self.db.crm_leads.update_one(
             {"lead_id": lead_id},
-            {"": {"last_called_at": now, "updated_at": now}, "": {"call_count": 1}},
+            {"$set": {"last_called_at": now, "updated_at": now}, "$inc": {"call_count": 1}},
         )
 
     def count_leads(
@@ -161,12 +147,12 @@ class CRMService:
         status: Optional[str] = None,
     ) -> Dict[str, int]:
         """Returns per-status counts for the filter context (for badges)."""
-        match = {"is_deleted": {"": True}}
+        match: Dict[str, Any] = {"is_deleted": {"$ne": True}}
         if hotel_id:
             match["hotel_id"] = hotel_id
 
-        pipeline = [{"": match}, {"": {"_id": "0", "count": {"": 1}}}]
+        pipeline = [{"$match": match}, {"$group": {"_id": "$status", "count": {"$sum": 1}}}]
         result = list(self.db.crm_leads.aggregate(pipeline))
-        counts = {r["_id"]: r["count"] for r in result}
+        counts = {r["_id"]: r["count"] for r in result if r.get("_id")}
         counts["total"] = sum(counts.values())
         return counts

@@ -12,7 +12,7 @@ import BulkLiveDashboard from "./bulk/BulkLiveDashboard";
 import BulkPageSkeleton from "./bulk/BulkPageSkeleton";
 import { validateLead } from "../utils/leadValidation";
 
-const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const BACKEND_URL = import.meta.env.VITE_API_URL;
 
 export default function BulkCalls() {
   const location = useLocation();

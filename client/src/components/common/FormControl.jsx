@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useFormContext } from "react-hook-form";
-import { ChevronDown, Search, Minus, Plus } from "lucide-react";
+import { ChevronDown, Search, Minus, Plus, Check } from "lucide-react";
 import { COUNTRY_CODES } from "../../utils/countryCodes";
 
 /**
@@ -203,7 +203,8 @@ export const InputField = ({
 };
 
 /**
- * Custom Select Dropdown Field
+ * Custom Select Dropdown Field (react-hook-form connected)
+ * Uses register & setValue from useFormContext
  */
 export const SelectField = ({
   name,
@@ -211,6 +212,7 @@ export const SelectField = ({
   options = [],
   rules = {},
   disabled = false,
+  searchable = false,
   placeholder = "Select an option",
 }) => {
   const {
@@ -221,12 +223,14 @@ export const SelectField = ({
   } = useFormContext();
 
   const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const dropdownRef = useRef(null);
+  const searchInputRef = useRef(null);
 
   const selectedValue = watch(name);
   const error = errors[name];
 
-  const selectedOption = options.find((opt) => opt.value === selectedValue);
+  const selectedOption = options.find((opt) => String(opt.value) === String(selectedValue));
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -239,10 +243,25 @@ export const SelectField = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Auto focus search
+  useEffect(() => {
+    if (isOpen && searchable && searchInputRef.current) {
+      setTimeout(() => searchInputRef.current?.focus(), 50);
+    }
+    if (!isOpen) setSearch("");
+  }, [isOpen, searchable]);
+
   const handleSelect = (val) => {
     setValue(name, val, { shouldValidate: true });
     setIsOpen(false);
   };
+
+  const filteredOptions = searchable && search.trim()
+    ? options.filter((opt) =>
+        opt.label.toLowerCase().includes(search.toLowerCase()) ||
+        (opt.subLabel && opt.subLabel.toLowerCase().includes(search.toLowerCase()))
+      )
+    : options;
 
   return (
     <div className="flex flex-col gap-1.5 w-full">
@@ -263,46 +282,90 @@ export const SelectField = ({
           aria-expanded={isOpen}
           disabled={disabled}
           onClick={() => setIsOpen((prev) => !prev)}
-          className={`w-full px-3.5 py-2.5 bg-slate-900/80 border rounded-xl text-sm flex items-center justify-between outline-none focus:ring-2 transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+          className={`w-full px-3.5 py-2.5 bg-slate-900/90 border rounded-xl text-sm flex items-center justify-between outline-none focus:ring-2 transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
             error
               ? "border-rose-500 focus:border-rose-500 focus:ring-rose-500/20"
-              : "border-slate-800 focus:border-indigo-500 focus:ring-indigo-500/20 hover:border-slate-700"
+              : isOpen
+              ? "border-indigo-500 ring-2 ring-indigo-500/20"
+              : "border-slate-800 hover:border-slate-700"
           }`}
         >
-          <span
-            className={`truncate ${
-              selectedOption ? "text-slate-100 font-medium" : "text-slate-500"
-            }`}
-          >
-            {selectedOption ? selectedOption.label : placeholder}
-          </span>
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {selectedOption?.icon && (
+              <span className="shrink-0 text-slate-400">{selectedOption.icon}</span>
+            )}
+            <span
+              className={`truncate ${
+                selectedOption ? "text-slate-100 font-medium" : "text-slate-500"
+              }`}
+            >
+              {selectedOption ? selectedOption.label : placeholder}
+            </span>
+            {selectedOption?.subLabel && (
+              <span className="text-[11px] text-slate-500 truncate hidden sm:inline">
+                ({selectedOption.subLabel})
+              </span>
+            )}
+          </div>
           <ChevronDown
             className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ml-2 ${
-              isOpen ? "rotate-180" : ""
+              isOpen ? "rotate-180 text-indigo-400" : ""
             }`}
           />
         </button>
 
         {/* Custom Dropdown List */}
         {isOpen && (
-          <div className="absolute top-full left-0 right-0 mt-1.5 max-h-56 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-y-auto p-1 divide-y divide-slate-800/40 animate-in fade-in zoom-in-95 duration-100">
-            {options.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => handleSelect(opt.value)}
-                className={`w-full px-3 py-2 text-left rounded-lg text-xs transition-colors flex items-center justify-between ${
-                  selectedValue === opt.value
-                    ? "bg-indigo-600/25 text-indigo-300 font-medium"
-                    : "text-slate-300 hover:bg-indigo-600/15 hover:text-indigo-200"
-                }`}
-              >
-                <span>{opt.label}</span>
-                {selectedValue === opt.value && (
-                  <span className="text-indigo-400 text-xs font-bold">✓</span>
-                )}
-              </button>
-            ))}
+          <div className="absolute top-full left-0 right-0 mt-1.5 max-h-60 bg-slate-900/98 backdrop-blur-xl border border-slate-800 rounded-xl shadow-2xl z-50 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+            {searchable && (
+              <div className="p-2 border-b border-slate-800/80 bg-slate-950/60 sticky top-0 z-10 flex items-center gap-2">
+                <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search..."
+                  className="w-full bg-transparent text-xs text-slate-200 outline-none placeholder:text-slate-500 py-1 pr-2"
+                />
+              </div>
+            )}
+            <div className="overflow-y-auto p-1 divide-y divide-slate-800/30">
+              {filteredOptions.length > 0 ? (
+                filteredOptions.map((opt) => {
+                  const isSelected = String(selectedValue) === String(opt.value);
+                  return (
+                    <button
+                      key={String(opt.value)}
+                      type="button"
+                      onClick={() => handleSelect(opt.value)}
+                      className={`w-full px-3 py-2 text-left rounded-lg text-xs transition-colors flex items-center justify-between gap-2 ${
+                        isSelected
+                          ? "bg-indigo-600/25 text-indigo-200 font-semibold"
+                          : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {opt.icon && <span className="shrink-0">{opt.icon}</span>}
+                        <span className="truncate">{opt.label}</span>
+                        {opt.subLabel && (
+                          <span className="text-[10px] text-slate-500 truncate">
+                            {opt.subLabel}
+                          </span>
+                        )}
+                      </div>
+                      {isSelected && (
+                        <Check className="w-3.5 h-3.5 text-indigo-400 font-bold shrink-0" />
+                      )}
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="p-3 text-center text-xs text-slate-500">
+                  No matching options
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -311,6 +374,145 @@ export const SelectField = ({
         <span className="text-xs text-rose-400 font-medium">
           {error.message || "Selection is required"}
         </span>
+      )}
+    </div>
+  );
+};
+
+/**
+ * Standalone Custom Select Field (Non-form / pure state controlled)
+ * Placed inside FormControl.jsx for cohesive UI architecture
+ */
+export const StandaloneSelect = ({
+  value,
+  onChange,
+  options = [],
+  placeholder = "Select an option",
+  disabled = false,
+  searchable = false,
+  size = "md",
+  className = "",
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const dropdownRef = useRef(null);
+  const searchInputRef = useRef(null);
+
+  const selectedOption = options.find((opt) => String(opt.value) === String(value));
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen && searchable && searchInputRef.current) {
+      setTimeout(() => searchInputRef.current?.focus(), 50);
+    }
+    if (!isOpen) setSearch("");
+  }, [isOpen, searchable]);
+
+  const filteredOptions = searchable && search.trim()
+    ? options.filter((opt) =>
+        opt.label.toLowerCase().includes(search.toLowerCase()) ||
+        (opt.subLabel && opt.subLabel.toLowerCase().includes(search.toLowerCase()))
+      )
+    : options;
+
+  return (
+    <div ref={dropdownRef} className={`relative select-none ${className}`}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setIsOpen((prev) => !prev)}
+        className={`w-full bg-slate-900/90 border border-slate-800 rounded-xl text-left flex items-center justify-between gap-2.5 transition-all duration-200 outline-none hover:border-slate-700 hover:bg-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed ${
+          isOpen ? "border-indigo-500 ring-2 ring-indigo-500/20" : ""
+        } ${size === "sm" ? "px-3 py-1.5 text-xs" : "px-3.5 py-2.5 text-sm"}`}
+      >
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          {selectedOption?.icon && (
+            <span className="shrink-0 text-slate-400">{selectedOption.icon}</span>
+          )}
+          <span
+            className={`truncate ${
+              selectedOption ? "text-slate-100 font-medium" : "text-slate-500"
+            }`}
+          >
+            {selectedOption ? selectedOption.label : placeholder}
+          </span>
+          {selectedOption?.subLabel && (
+            <span className="text-[11px] text-slate-500 truncate hidden sm:inline">
+              ({selectedOption.subLabel})
+            </span>
+          )}
+        </div>
+        <ChevronDown
+          className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ml-1 ${
+            isOpen ? "rotate-180 text-indigo-400" : ""
+          }`}
+        />
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 right-0 mt-1.5 max-h-60 bg-slate-900/98 backdrop-blur-xl border border-slate-800 rounded-xl shadow-2xl z-50 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          {searchable && (
+            <div className="p-2 border-b border-slate-800/80 bg-slate-950/60 sticky top-0 z-10 flex items-center gap-2">
+              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search..."
+                className="w-full bg-transparent text-xs text-slate-200 outline-none placeholder:text-slate-500 py-1 pr-2"
+              />
+            </div>
+          )}
+          <div className="overflow-y-auto p-1 divide-y divide-slate-800/30">
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((opt) => {
+                const isSelected = String(value) === String(opt.value);
+                return (
+                  <button
+                    key={String(opt.value)}
+                    type="button"
+                    onClick={() => {
+                      onChange(opt.value);
+                      setIsOpen(false);
+                    }}
+                    className={`w-full px-3 py-2 text-left rounded-lg text-xs transition-colors flex items-center justify-between gap-2 ${
+                      isSelected
+                        ? "bg-indigo-600/25 text-indigo-200 font-semibold"
+                        : "text-slate-300 hover:bg-slate-800/70 hover:text-white"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      {opt.icon && <span className="shrink-0">{opt.icon}</span>}
+                      <span className="truncate">{opt.label}</span>
+                      {opt.subLabel && (
+                        <span className="text-[10px] text-slate-500 truncate">
+                          {opt.subLabel}
+                        </span>
+                      )}
+                    </div>
+                    {isSelected && (
+                      <Check className="w-3.5 h-3.5 text-indigo-400 font-bold shrink-0" />
+                    )}
+                  </button>
+                );
+              })
+            ) : (
+              <div className="p-3 text-center text-xs text-slate-500">
+                No matching options
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
