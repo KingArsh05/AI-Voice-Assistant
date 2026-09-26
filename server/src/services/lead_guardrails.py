@@ -22,25 +22,57 @@ BLOCKED_NAME_PATTERNS = [
     r"\bstupid\b",
     r"\bfuck\b",
     r"\bbitch\b",
+    r"\bmadarchod\b",
+    r"\bbehenchod\b",
+    r"\bsaala\b",
+    r"\bkamina\b",
+    r"\bharam[ij]\b",
+    r"\bnalayak\b",
+    r"\bbewakoof\b",
 ]
 
 # Patterns in lead notes that indicate non-hospitality abuse, extortion, scams or harassment
 BLOCKED_LEAD_PATTERNS = [
+    # Lottery / Prize scams
     r"\blottery\b",
     r"\binam\b",
     r"\bprize\b",
     r"\blakh rupees\b",
+    r"\bjackpot\b",
+    r"\bwin.*money\b",
+    # Threats / Extortion
+    r"\bextortion\b",
+    r"\bvasooli\b",
+    r"\brecovery\b",
+    r"\bransomware?\b",
+    r"\bthreat\b",
+    r"\bpolice\b",
+    r"\bfir\b",
+    r"\bjail\b",
+    r"\bdarao\b",
+    r"\bdhamki\b",
+    # Robbery / Violence
+    r"\brobbery\b",
+    r"\brobber\b",
+    r"\bchori\b",
+    r"\bnakli\b",
+    r"\bdhoka\b",
+    r"\bdhokebaazi\b",
+    r"\bmaar\b",
+    r"\bpeetna\b",
+    r"\bmarwao\b",
+    # Harassment
     r"\bmake him pay\b",
     r"\bmake her pay\b",
     r"\bbroken tv\b",
     r"\btv damage\b",
     r"\bsay sorry\b",
-    r"\bpolice\b",
-    r"\bthreat\b",
-    r"\bextortion\b",
-    r"\brecovery\b",
-    r"\bvasooli\b",
+    r"\bfake booking\b",
+    r"\bfake reservation\b",
+    # Abuse / Gaali
     r"\bgaali\b",
+    r"\babuse\b",
+    r"\bharassment\b",
 ]
 
 # Meta-instructions operators accidentally type for the bot, e.g. "in hindi tell him..."

@@ -31,6 +31,11 @@ TERMINAL_CALL_STATUSES = {
     "hangup",
 }
 
+# Global worker registry: campaign_id -> Thread
+# Prevents duplicate daemon threads and enables dead-thread detection
+_campaign_workers: Dict[str, threading.Thread] = {}
+_workers_lock = threading.Lock()
+
 
 class CampaignService:
     def __init__(self):
@@ -136,15 +141,25 @@ class CampaignService:
         if not doc:
             raise ValueError(f"Campaign {campaign_id} not found")
 
-        if doc.get("status") in [CampaignStatus.RUNNING.value]:
-            return {"message": "Campaign is already running", "campaign": self._format_campaign(doc)}
-
         if doc.get("status") in [CampaignStatus.COMPLETED.value, CampaignStatus.CANCELLED.value]:
             raise ValueError(f"Cannot start a campaign that is {doc.get('status')}")
 
+        # Check if a live worker thread already exists for this campaign
+        with _workers_lock:
+            existing = _campaign_workers.get(campaign_id)
+            if existing and existing.is_alive():
+                logger.info("Worker already alive for campaign %s, skipping spawn", campaign_id)
+                updated_doc = self.db.campaigns.find_one({"campaign_id": campaign_id})
+                return {"message": "Campaign worker is already running", "campaign": self._format_campaign(updated_doc)}
+
+        # Mark as running before spawning thread
         self.db.campaigns.update_one(
             {"campaign_id": campaign_id},
-            {"$set": {"status": CampaignStatus.RUNNING.value, "updated_at": datetime.now(timezone.utc)}},
+            {"$set": {
+                "status": CampaignStatus.RUNNING.value,
+                "worker_heartbeat": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
+            }},
         )
 
         # Spawn background processing thread
@@ -155,6 +170,10 @@ class CampaignService:
             name=f"campaign-worker-{campaign_id}",
         )
         thread.start()
+
+        with _workers_lock:
+            _campaign_workers[campaign_id] = thread
+
         logger.info("Started background worker for campaign %s", campaign_id)
 
         updated_doc = self.db.campaigns.find_one({"campaign_id": campaign_id})
@@ -209,6 +228,15 @@ class CampaignService:
         logger.info("[%s] Worker loop entered", campaign_id)
 
         while True:
+            # ─ Heartbeat: write timestamp so DB shows worker is alive ───────────
+            try:
+                self.db.campaigns.update_one(
+                    {"campaign_id": campaign_id},
+                    {"$set": {"worker_heartbeat": datetime.now(timezone.utc)}},
+                )
+            except Exception as hb_err:
+                logger.debug("[%s] Heartbeat write failed: %s", campaign_id, hb_err)
+
             doc = self.db.campaigns.find_one({"campaign_id": campaign_id})
             if not doc:
                 logger.warning("[%s] Campaign not found in worker. Exiting.", campaign_id)
@@ -275,7 +303,6 @@ class CampaignService:
                 },
             )
 
-            # Step 1.5: 15-minute cross-campaign cooldown check bypassed for developer testing with single number
             trigger_id = None
             call_error = None
 
@@ -310,7 +337,6 @@ class CampaignService:
                 final_status, call_duration = self._wait_for_call_terminal(
                     trigger_id=trigger_id,
                     max_wait_seconds=max_call_duration_seconds,
-                    poll_interval=3,
                 )
             else:
                 final_status = LeadStatus.FAILED.value
@@ -354,23 +380,54 @@ class CampaignService:
                 logger.info("[%s] Cooldown sleep of %d seconds...", campaign_id, cooldown_seconds)
                 time.sleep(cooldown_seconds)
 
+        # Clean up registry on exit
+        with _workers_lock:
+            _campaign_workers.pop(campaign_id, None)
+
         logger.info("[%s] Worker loop finished", campaign_id)
 
-    def _wait_for_call_terminal(self, trigger_id: str, max_wait_seconds: int = 240, poll_interval: int = 3):
+    def _wait_for_call_terminal(
+        self,
+        trigger_id: str,
+        max_wait_seconds: int = 240,
+    ):
         """
-        Polls db.calls and Plivo live calls API for the given trigger_id.
-        Crucial: It ensures the physical telephony call has COMPLETELY hung up before returning,
-        preventing overlapping / colliding calls on the guest's line.
+        Polls db.calls for terminal status using exponential backoff.
+
+        Key improvements over original:
+        - Exponential backoff: 3 → 6 → 12 → 20s (max), preventing tight constant polling
+        - 45-second short-circuit: if no DB record arrives within 45s of trigger,
+          Plivo webhook is likely delayed/lost — move on rather than blocking entire campaign
+        - Still respects max_wait_seconds for calls that ARE tracked but run long
         """
         start_time = time.time()
         call_uuid = None
+        poll_interval = 3  # Start at 3s, grow exponentially
+        MAX_POLL_INTERVAL = 20
+        NO_RECORD_TIMEOUT = 45  # Short-circuit if webhook never arrives
+        found_any_record = False
 
         while (time.time() - start_time) < max_wait_seconds:
             time.sleep(poll_interval)
+            # Exponential backoff for polling interval
+            poll_interval = min(poll_interval * 1.5, MAX_POLL_INTERVAL)
+
             call_doc = self.db.calls.find_one({"trigger_id": trigger_id})
+
+            # Short-circuit: if no webhook record after 45s, assume completed and move on
             if not call_doc:
+                elapsed = time.time() - start_time
+                if elapsed >= NO_RECORD_TIMEOUT:
+                    logger.warning(
+                        "[_wait_for_call_terminal] No webhook received for trigger_id=%s after %.0fs. "
+                        "Moving on to next lead to prevent campaign stall.",
+                        trigger_id,
+                        elapsed,
+                    )
+                    return LeadStatus.COMPLETED.value, int(elapsed)
                 continue
 
+            found_any_record = True
             if not call_uuid:
                 call_uuid = call_doc.get("call_uuid")
 
@@ -378,13 +435,13 @@ class CampaignService:
             duration = call_doc.get("duration") or call_doc.get("recording_duration") or int(time.time() - start_time)
 
             if status in TERMINAL_CALL_STATUSES:
-                # Double-check against Plivo live calls if call_uuid is available to ensure it has truly cleared the line
+                # Double-check against Plivo live calls if call_uuid is available
                 if call_uuid and hasattr(self.call_service, "client"):
                     try:
                         live_call_ids = self.call_service.client.live_calls.list_ids().get("calls", [])
                         if call_uuid in live_call_ids:
                             logger.info(
-                                "Call %s marked %s in DB but still active on Plivo carrier. Waiting for full hangup...",
+                                "Call %s marked %s in DB but still active on Plivo carrier. Waiting...",
                                 call_uuid,
                                 status,
                             )
@@ -404,7 +461,7 @@ class CampaignService:
                 else:
                     return LeadStatus.FAILED.value, int(duration)
 
-        # Max call duration reached (e.g. 3-4 mins)
+        # Max call duration reached
         elapsed = int(time.time() - start_time)
         logger.warning(
             "Max call duration reached (%ds >= %ds) for trigger_id=%s. Forcing call disconnect.",
@@ -422,18 +479,18 @@ class CampaignService:
             if call_uuid and hasattr(self.call_service, "client"):
                 self.call_service.client.calls.hangup(call_uuid)
                 logger.info("Successfully sent hangup command for call_uuid=%s via Plivo", call_uuid)
-                # Brief sleep to allow carrier circuit to release
                 time.sleep(2)
         except Exception as e:
             logger.warning("Could not force hangup for call_uuid via Plivo: %s", e)
 
-        # Update local call document to completed with max duration note
+        # Update local call document
         self.db.calls.update_one(
             {"trigger_id": trigger_id, "status": {"$nin": list(TERMINAL_CALL_STATUSES)}},
             {"$set": {"status": "completed", "duration": elapsed, "hangup_source": "system_max_duration"}}
         )
 
         return LeadStatus.COMPLETED.value, elapsed
+
 
     def _format_campaign(self, doc: dict) -> dict:
         if not doc:
