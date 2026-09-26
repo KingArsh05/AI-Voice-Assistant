@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { useForm, FormProvider } from "react-hook-form";
 import * as XLSX from "xlsx";
 import { ListOrdered, Sparkles } from "lucide-react";
@@ -14,6 +15,8 @@ import { validateLead } from "../utils/leadValidation";
 const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export default function BulkCalls() {
+  const location = useLocation();
+
   // Page initialization loading state (prevents layout jumping/resizing)
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
@@ -27,6 +30,25 @@ export default function BulkCalls() {
   const [fileName, setFileName] = useState("");
   const [fileError, setFileError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Check if leads were passed from CRM
+  useEffect(() => {
+    if (location.state?.prefilledLeads && location.state.prefilledLeads.length > 0) {
+      const formatted = location.state.prefilledLeads.map((l, idx) => ({
+        index: idx + 1,
+        guest_name: l.guest_name,
+        phone_number: l.phone_number,
+        lead_details: l.lead_details || "",
+        isValid: true,
+        errors: [],
+      }));
+      setParsedLeads(formatted);
+      setFileName(`CRM Export (${formatted.length} leads)`);
+      if (location.state.prefilledLeads[0]?.hotel_id) {
+        methods.setValue("hotel_id", location.state.prefilledLeads[0].hotel_id);
+      }
+    }
+  }, [location.state]);
 
   // Active / Loaded campaign state
   const [campaign, setCampaign] = useState(null);

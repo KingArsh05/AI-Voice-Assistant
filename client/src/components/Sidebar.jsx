@@ -1,9 +1,15 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { PhoneCall, ListFilter, Bot, Activity, PhoneIncoming, Building2, ListOrdered } from "lucide-react";
+import { PhoneCall, ListFilter, Bot, Activity, PhoneIncoming, Building2, ListOrdered, Users } from "lucide-react";
 
 export default function Sidebar() {
   const navItems = [
+    {
+      name: "CRM Leads",
+      path: "/crm",
+      icon: Users,
+      badge: "Database",
+    },
     {
       name: "Make Call",
       path: "/make-call",

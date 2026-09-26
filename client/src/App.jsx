@@ -6,6 +6,7 @@ import MakeCall from "./components/MakeCall";
 import BulkCalls from "./components/BulkCalls";
 import CallLogs from "./components/CallLogs";
 import Hotels from "./components/Hotels";
+import CRM from "./components/CRM";
 
 export default function App() {
   return (
@@ -20,12 +21,13 @@ export default function App() {
 
           <main className="flex-1 overflow-y-auto flex flex-col">
             <Routes>
-              <Route path="/" element={<Navigate to="/make-call" replace />} />
+              <Route path="/" element={<Navigate to="/crm" replace />} />
+              <Route path="/crm" element={<CRM />} />
               <Route path="/make-call" element={<MakeCall />} />
               <Route path="/bulk-calls" element={<BulkCalls />} />
               <Route path="/call-logs" element={<CallLogs />} />
               <Route path="/hotels" element={<Hotels />} />
-              <Route path="*" element={<Navigate to="/make-call" replace />} />
+              <Route path="*" element={<Navigate to="/crm" replace />} />
             </Routes>
           </main>
         </div>
