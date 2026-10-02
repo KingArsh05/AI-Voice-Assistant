@@ -22,6 +22,15 @@ class Config:
     WS_URL = os.getenv("WS_URL")
     SERVER_URL = os.getenv("SERVER_URL")
 
+    COMBOT_BASE_URL = os.getenv(
+        "COMBOT_BASE_URL",
+        "https://combot-crm-v2dot1-316221817495.asia-south1.run.app"
+    )
+    COMBOT_SECRET_KEY = os.getenv(
+        "COMBOT_SECRET_KEY",
+        "django-insecure-staychat_super_secret_key"
+    )
+
     @classmethod
     def validate(cls):
         """Fail fast if critical environment variables are missing."""

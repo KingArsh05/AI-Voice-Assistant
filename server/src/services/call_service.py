@@ -236,23 +236,45 @@ class CallService:
             from src.services.hotel_service import HotelService
             hotel_svc = HotelService()
             hotel_doc = hotel_svc.get_hotel(data.hotel_id)
-            if not hotel_doc:
-                raise ValueError(f"Hotel with ID '{data.hotel_id}' not found or inactive. Cannot initiate call without property context.")
+            if hotel_doc:
+                hotel_name = hotel_doc.get("name", "Hotel Reservations")
+                hotel_knowledge_brief = self.build_hotel_knowledge_brief(data.hotel_id)
+                hotel_snapshot = {
+                    "hotel_id": data.hotel_id,
+                    "name": hotel_name,
+                    "star_rating": hotel_doc.get("star_rating"),
+                    "property_type": hotel_doc.get("property_type"),
+                    "compiled_context_snapshot": hotel_knowledge_brief,
+                }
+            else:
+                # Fallback for StayChat Combot hotel IDs (e.g. 111111, 376891, etc.)
+                STAYCHAT_HOTEL_NAMES = {
+                    "111111": ("Hotel Sahu", "Hotel Sahu near Kashi Vishwanath Temple, Varanasi. Check-in: 12:00 PM, Check-out: 11:00 AM. Offers Deluxe AC rooms and non-AC rooms with pure vegetarian dining."),
+                    "376891": ("Hotel Paradise", "Hotel Paradise, Jaipur. Comfortable rooms with modern amenities and multi-cuisine restaurant."),
+                    "988273": ("Sanidhyam by Sahu Hotels", "Sanidhyam by Sahu Hotels, Varanasi."),
+                    "968225": ("Hotel Maharaja", "Hotel Maharaja, Nainital."),
+                    "191919": ("Hoteldummy", "Hotel property reservation specialist."),
+                    "310978": ("Hotel North Star", "Hotel North Star reservation specialist."),
+                }
+                meta = STAYCHAT_HOTEL_NAMES.get(str(data.hotel_id))
+                if meta:
+                    hotel_name, hotel_knowledge_brief = meta
+                    hotel_snapshot = {
+                        "hotel_id": str(data.hotel_id),
+                        "name": hotel_name,
+                        "compiled_context_snapshot": hotel_knowledge_brief,
+                    }
+                else:
+                    hotel_name = f"Hotel {data.hotel_id}"
+                    hotel_knowledge_brief = f"{hotel_name} reservations and guest relations specialist."
+                    hotel_snapshot = {
+                        "hotel_id": str(data.hotel_id),
+                        "name": hotel_name,
+                        "compiled_context_snapshot": hotel_knowledge_brief,
+                    }
 
-            hotel_name = hotel_doc.get("name", "Hotel Reservations")
-            hotel_knowledge_brief = self.build_hotel_knowledge_brief(data.hotel_id)
-            if not hotel_knowledge_brief:
-                raise ValueError(f"Failed to compile AI knowledge brief for hotel '{hotel_name}' ({data.hotel_id}).")
-
-            hotel_snapshot = {
-                "hotel_id": data.hotel_id,
-                "name": hotel_name,
-                "star_rating": hotel_doc.get("star_rating"),
-                "property_type": hotel_doc.get("property_type"),
-                "compiled_context_snapshot": hotel_knowledge_brief,
-            }
             logger.info(
-                "hotel_knowledge_brief compiled for hotel_id=%s (%s)",
+                "hotel_knowledge_brief resolved for hotel_id=%s (%s)",
                 data.hotel_id,
                 hotel_name,
             )

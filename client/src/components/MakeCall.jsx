@@ -78,6 +78,9 @@ export default function MakeCall() {
       hotel_id: data.hotel_id || null,
     };
 
+    console.log({payload})
+    return
+
     try {
       const response = await fetch(`${backendUrl}/api/v1/voice/call`, {
         method: "POST",

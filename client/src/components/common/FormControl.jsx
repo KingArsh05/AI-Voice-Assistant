@@ -274,7 +274,10 @@ export const SelectField = ({
       {/* Hidden input for react-hook-form registration & validation */}
       <input type="hidden" {...register(name, rules)} />
 
-      <div ref={dropdownRef} className="relative w-full">
+      <div
+        ref={dropdownRef}
+        className={`relative w-full ${isOpen ? "z-50" : "z-auto"}`}
+      >
         <button
           id={`${name}-btn`}
           type="button"
@@ -316,7 +319,7 @@ export const SelectField = ({
 
         {/* Custom Dropdown List */}
         {isOpen && (
-          <div className="absolute top-full left-0 right-0 mt-1.5 max-h-60 bg-slate-900/98 backdrop-blur-xl border border-slate-800 rounded-xl shadow-2xl z-50 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          <div className="absolute top-full left-0 right-0 mt-1.5 max-h-60 bg-slate-900/98 backdrop-blur-xl border border-slate-800 rounded-xl shadow-2xl z-[100] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100">
             {searchable && (
               <div className="p-2 border-b border-slate-800/80 bg-slate-950/60 sticky top-0 z-10 flex items-center gap-2">
                 <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />
@@ -425,7 +428,10 @@ export const StandaloneSelect = ({
     : options;
 
   return (
-    <div ref={dropdownRef} className={`relative select-none ${className}`}>
+    <div
+      ref={dropdownRef}
+      className={`relative select-none ${isOpen ? "z-50" : "z-auto"} ${className}`}
+    >
       <button
         type="button"
         disabled={disabled}
@@ -459,7 +465,7 @@ export const StandaloneSelect = ({
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1.5 max-h-60 bg-slate-900/98 backdrop-blur-xl border border-slate-800 rounded-xl shadow-2xl z-50 flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+        <div className="absolute top-full left-0 right-0 mt-1.5 max-h-60 bg-slate-900/98 backdrop-blur-xl border border-slate-800 rounded-xl shadow-2xl z-[100] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100">
           {searchable && (
             <div className="p-2 border-b border-slate-800/80 bg-slate-950/60 sticky top-0 z-10 flex items-center gap-2">
               <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />

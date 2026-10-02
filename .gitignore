@@ -46,3 +46,4 @@ node_modules/
 client/node_modules/
 client/dist/
 client/.vite/
+sample_guest_leads.csv

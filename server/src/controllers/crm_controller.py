@@ -1,4 +1,5 @@
 import logging
+import requests
 from flask import Blueprint, request, jsonify
 from pydantic import ValidationError
 
@@ -113,15 +114,22 @@ def call_lead(lead_id: str):
             return jsonify({"success": False, "error": "Lead not found"}), 404
 
         from_number = body.get("from_number") or Config.PLIVO_PHONE_NUMBER
-        guest_lead = body.get("lead_details") or lead.get("lead_details") or "Prospective guest lead follow-up."
+        guest_name = body.get("guest_name") or lead.get("guest_name") or "Guest"
+        guest_lead = (
+            body.get("guest_lead")
+            or body.get("lead_details")
+            or lead.get("lead_details")
+            or "Prospective guest lead follow-up."
+        )
+        hotel_id = body.get("hotel_id") or lead.get("hotel_id")
 
         call_req = InitiateCallRequest(
-            guest_name=lead["guest_name"],
+            guest_name=guest_name,
             from_number=from_number,
             to_number=lead["phone_number"],
             persona="lead_followup",
             guest_lead=guest_lead,
-            hotel_id=lead.get("hotel_id"),
+            hotel_id=hotel_id,
         )
         result = call_service.make_call(call_req)
         crm_service.mark_called(lead_id)
@@ -136,3 +144,32 @@ def call_lead(lead_id: str):
     except Exception as e:
         logger.exception("Error calling CRM lead: %s", e)
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@crm_bp.route("/staychat-leads", methods=["GET"])
+def get_staychat_leads():
+    """Proxy route to fetch leads from Combot CRM backend."""
+    try:
+        hotel_id = request.args.get("hotelId", "111111")
+        page = request.args.get("page", "1")
+        limit = request.args.get("limit", "1000")
+        lead_type = request.args.get("leadType", "LEAD")
+
+        url = f"{Config.COMBOT_BASE_URL}/api/backend/classifications"
+        params = {
+            "hotelId": hotel_id,
+            "page": page,
+            "limit": limit,
+            "Secretkey": Config.COMBOT_SECRET_KEY,
+            "leadType": lead_type,
+        }
+
+        resp = requests.get(url, params=params, timeout=30)
+        return jsonify(resp.json()), resp.status_code
+    except requests.exceptions.RequestException as e:
+        logger.exception("Error fetching Combot StayChat leads: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 502
+    except Exception as e:
+        logger.exception("Unexpected error fetching StayChat leads: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+

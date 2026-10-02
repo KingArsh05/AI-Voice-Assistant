@@ -38,6 +38,8 @@ export default function ConfirmCallModal({ lead, hotels, onClose, onCallTriggere
         body: JSON.stringify({
           from_number: '+918031825752',
           hotel_id: hotelId || null,
+          guest_name: guestName.trim() || undefined,
+          guest_lead: leadDetails.trim() || undefined,
           lead_details: leadDetails.trim() || undefined,
         }),
       });
@@ -46,7 +48,7 @@ export default function ConfirmCallModal({ lead, hotels, onClose, onCallTriggere
       if (res.ok && data.success) {
         onCallTriggered(data);
       } else {
-        setError(data.message || 'Failed to dispatch voice call');
+        setError(data.error || data.message || 'Failed to dispatch voice call');
       }
     } catch (err) {
       setError('Network error while dispatching call');
@@ -94,8 +96,8 @@ export default function ConfirmCallModal({ lead, hotels, onClose, onCallTriggere
               type="text"
               value={guestName}
               onChange={(e) => setGuestName(e.target.value)}
-              disabled
-              className="w-full px-3.5 py-2.5 bg-slate-950/50 border border-slate-800 rounded-xl text-sm text-slate-300 opacity-80 cursor-not-allowed"
+              placeholder="e.g. Prit"
+              className="w-full px-3.5 py-2.5 bg-slate-950/70 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
             />
           </div>
 
