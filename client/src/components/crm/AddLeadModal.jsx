@@ -10,6 +10,10 @@ export default function AddLeadModal({ hotels, onClose, onLeadCreated }) {
   const [countryCode, setCountryCode] = useState('+91');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [hotelId, setHotelId] = useState('');
+  const [checkInDate, setCheckInDate] = useState('');
+  const [checkOutDate, setCheckOutDate] = useState('');
+  const [roomPreference, setRoomPreference] = useState('');
+  const [budget, setBudget] = useState('');
   const [leadDetails, setLeadDetails] = useState('');
   const [status, setStatus] = useState('new');
   const [loading, setLoading] = useState(false);
@@ -46,6 +50,10 @@ export default function AddLeadModal({ hotels, onClose, onLeadCreated }) {
           guest_name: guestName.trim(),
           phone_number: fullPhone,
           hotel_id: hotelId || null,
+          check_in_date: checkInDate || undefined,
+          check_out_date: checkOutDate || undefined,
+          room_preference: roomPreference.trim() || undefined,
+          budget: budget.trim() || undefined,
           lead_details: leadDetails.trim() || undefined,
           status: status,
           source: 'manual',
@@ -163,6 +171,60 @@ export default function AddLeadModal({ hotels, onClose, onLeadCreated }) {
                   { value: 'booked', label: 'Booked' },
                   { value: 'cold', label: 'Cold / Unresponsive' },
                 ]}
+              />
+            </div>
+          </div>
+
+          {/* Stay Dates */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Check-in Date
+              </label>
+              <input
+                type="date"
+                value={checkInDate}
+                onChange={(e) => setCheckInDate(e.target.value)}
+                className="w-full px-3.5 py-2 bg-slate-950/70 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Check-out Date
+              </label>
+              <input
+                type="date"
+                value={checkOutDate}
+                onChange={(e) => setCheckOutDate(e.target.value)}
+                className="w-full px-3.5 py-2 bg-slate-950/70 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+          </div>
+
+          {/* Room Category & Budget */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Room Preference
+              </label>
+              <input
+                type="text"
+                value={roomPreference}
+                onChange={(e) => setRoomPreference(e.target.value)}
+                placeholder="e.g. Deluxe AC Room"
+                className="w-full px-3.5 py-2 bg-slate-950/70 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Budget / Quoted Rate
+              </label>
+              <input
+                type="text"
+                value={budget}
+                onChange={(e) => setBudget(e.target.value)}
+                placeholder="e.g. ₹5,000 / night"
+                className="w-full px-3.5 py-2 bg-slate-950/70 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
               />
             </div>
           </div>

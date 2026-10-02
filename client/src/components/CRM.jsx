@@ -288,8 +288,22 @@ export default function CRM() {
       );
       const data = await res.json();
       if (data.success) {
-        setLeads(data.data || []);
-        if (data.counts) setStats(data.counts);
+        setLeads(data.leads || data.data || []);
+        if (data.counts) {
+          const raw = data.counts;
+          const by_status = raw.by_status || {
+            new: raw.new || 0,
+            follow_up: raw.follow_up || 0,
+            in_progress: raw.in_progress || 0,
+            booked: raw.booked || 0,
+            cold: raw.cold || 0,
+            lost: raw.lost || 0,
+          };
+          setStats({
+            total: raw.total || (data.leads ? data.leads.length : 0),
+            by_status,
+          });
+        }
       }
     } catch (err) {
       console.error("Failed to fetch CRM leads:", err);
@@ -405,45 +419,73 @@ export default function CRM() {
           guest_name: "Rahul Sharma",
           phone_number: "+918544953527",
           lead_details:
-            "Interested in Deluxe Room for 2 nights check-in tomorrow",
+            "Interested in Deluxe Room for 2 nights check-in tomorrow with complimentary breakfast",
+          check_in_date: "2026-10-15",
+          check_out_date: "2026-10-17",
+          room_preference: "Deluxe AC Room",
+          budget: "₹4,500/night",
           status: "new",
         },
         {
           guest_name: "Priya Verma",
           phone_number: "+918544953527",
-          lead_details: "Inquired about suite pricing and airport cab pickup",
+          lead_details: "Inquired about suite pricing and airport cab pickup for family of 3",
+          check_in_date: "2026-10-20",
+          check_out_date: "2026-10-22",
+          room_preference: "Executive Suite",
+          budget: "₹8,200",
           status: "follow_up",
         },
         {
           guest_name: "Aman Gupta",
           phone_number: "+918544953527",
-          lead_details: "Looking to book banquet hall for family dinner",
+          lead_details: "Looking to book banquet hall for family dinner and 4 rooms for guests",
+          check_in_date: "2026-11-05",
+          check_out_date: "2026-11-06",
+          room_preference: "Premium King Bed",
+          budget: "₹25,000",
           status: "new",
         },
         {
           guest_name: "Vikram Malhotra",
           phone_number: "+918544953527",
-          lead_details: "Requested early check-in at 10 AM for executive suite",
+          lead_details: "Requested early check-in at 10 AM for executive suite and late checkout",
+          check_in_date: "2026-10-18",
+          check_out_date: "2026-10-19",
+          room_preference: "Executive Suite",
+          budget: "₹6,000",
           status: "in_progress",
         },
         {
           guest_name: "Neha Kapoor",
           phone_number: "+918544953527",
           lead_details:
-            "Asking for couple weekend package with breakfast included",
+            "Asking for couple weekend package with candlelight dinner & breakfast included",
+          check_in_date: "2026-10-25",
+          check_out_date: "2026-10-27",
+          room_preference: "Deluxe Room",
+          budget: "₹7,500",
           status: "new",
         },
         {
           guest_name: "Siddharth Rao",
           phone_number: "+918544953527",
-          lead_details: "Corporate stay for 3 days requiring high-speed wifi",
+          lead_details: "Corporate stay for 3 days requiring high-speed wifi & quiet room",
+          check_in_date: "2026-11-01",
+          check_out_date: "2026-11-04",
+          room_preference: "Business Single",
+          budget: "₹10,500",
           status: "follow_up",
         },
         {
           guest_name: "Ananya Patel",
           phone_number: "+918544953527",
           lead_details:
-            "Inquiry for pool facing villa with extra bed for child",
+            "Inquiry for pool facing villa with extra bed for child, requested payment link",
+          check_in_date: "2026-11-12",
+          check_out_date: "2026-11-14",
+          room_preference: "Pool Villa",
+          budget: "₹14,000",
           status: "booked",
         },
       ];
@@ -1344,17 +1386,38 @@ export default function CRM() {
             </div>
           </div>
 
+          {/* Table Header Bar with counts and filters */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-white">Local Pipeline</span>
+              {selectedStatus && (
+                <span className="text-[11px] px-2 py-0.5 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 font-medium">
+                  Status: {STATUS_CONFIG[selectedStatus]?.label || selectedStatus}
+                </span>
+              )}
+              {selectedHotel && (
+                <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700">
+                  Property filtered
+                </span>
+              )}
+            </div>
+            <div className="text-slate-400 text-[11px]">
+              Showing <span className="text-white font-semibold">{leads.length}</span> lead{leads.length === 1 ? "" : "s"}
+            </div>
+          </div>
+
           {/* Leads Table */}
           <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-slate-300 table-fixed border-collapse">
                 <colgroup>
-                  <col className="w-[5%]" />
-                  <col className="w-[22%]" />
-                  <col className="w-[15%]" />
+                  <col className="w-[4%]" />
+                  <col className="w-[20%]" />
+                  <col className="w-[14%]" />
                   <col className="w-[12%]" />
-                  <col className="w-[28%]" />
-                  <col className="w-[8%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[22%]" />
+                  <col className="w-[6%]" />
                   <col className="w-[10%]" />
                 </colgroup>
                 <thead className="bg-slate-950/80 text-[11px] font-semibold text-slate-400 border-b border-slate-800/90 uppercase tracking-wider">
@@ -1373,16 +1436,19 @@ export default function CRM() {
                       </button>
                     </th>
                     <th className="py-3.5 px-4 text-left font-semibold">
-                      Guest & Phone
+                      Guest & Contact
                     </th>
                     <th className="py-3.5 px-4 text-left font-semibold">
                       Hotel Property
                     </th>
                     <th className="py-3.5 px-3 text-center font-semibold">
-                      Status
+                      Pipeline Status
+                    </th>
+                    <th className="py-3.5 px-3 text-center font-semibold">
+                      Stay / Booking
                     </th>
                     <th className="py-3.5 px-4 text-left font-semibold">
-                      Lead Details & Notes
+                      Lead Context & Notes
                     </th>
                     <th className="py-3.5 px-3 text-center font-semibold">
                       Calls
@@ -1396,7 +1462,7 @@ export default function CRM() {
                   {loading ? (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={8}
                         className="py-14 px-4 text-center text-slate-500"
                       >
                         <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-400" />
@@ -1406,7 +1472,7 @@ export default function CRM() {
                   ) : leads.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={8}
                         className="py-16 px-4 text-center text-slate-500"
                       >
                         <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto mb-4">
@@ -1444,17 +1510,35 @@ export default function CRM() {
                     </tr>
                   ) : (
                     leads.map((lead) => {
-                      const isChecked = selectedLeads.has(lead.lead_id);
+                      const leadUniqueId = lead.lead_id || lead._id || lead.id;
+                      const isChecked = selectedLeads.has(leadUniqueId);
                       const st =
                         STATUS_CONFIG[lead.status] || STATUS_CONFIG.new;
+
+                      // Resolve hotel name cleanly
+                      const matchedHotel =
+                        hotels.find(
+                          (h) =>
+                            h.hotel_id === lead.hotel_id ||
+                            h._id === lead.hotel_id,
+                        ) ||
+                        STAYCHAT_HOTELS.find(
+                          (h) => h.hotel_id === lead.hotel_id,
+                        );
+                      const displayHotelName =
+                        lead.hotel_name ||
+                        matchedHotel?.name ||
+                        (lead.hotel_id ? `Hotel ${lead.hotel_id}` : null);
+
                       return (
                         <tr
-                          key={lead.lead_id}
+                          key={leadUniqueId}
                           className={`hover:bg-slate-800/40 transition-colors ${isChecked ? "bg-indigo-600/5" : ""}`}
                         >
+                          {/* Checkbox */}
                           <td className="py-3.5 px-3 text-center align-top">
                             <button
-                              onClick={() => toggleSelectLead(lead.lead_id)}
+                              onClick={() => toggleSelectLead(leadUniqueId)}
                               className="text-slate-400 hover:text-white cursor-pointer inline-flex items-center justify-center mt-0.5"
                             >
                               {isChecked ? (
@@ -1464,6 +1548,8 @@ export default function CRM() {
                               )}
                             </button>
                           </td>
+
+                          {/* Guest Name, Phone & Source */}
                           <td className="py-3.5 px-4 align-top">
                             <div
                               className="font-semibold text-white truncate capitalize text-[13px]"
@@ -1477,14 +1563,35 @@ export default function CRM() {
                                 {lead.phone_number}
                               </span>
                             </div>
-                          </td>
-                          <td className="py-3.5 px-4 align-top text-xs text-slate-300">
-                            {lead.hotel_name ? (
-                              <div className="flex items-center gap-1.5 font-medium text-slate-200">
-                                <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                <span className="truncate">
-                                  {lead.hotel_name}
+                            {lead.email && (
+                              <div className="text-[11px] text-slate-400 mt-1 truncate">
+                                {lead.email}
+                              </div>
+                            )}
+                            {lead.source && (
+                              <div className="mt-1">
+                                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-400 border border-slate-700/50">
+                                  {lead.source.replace("_", " ")}
                                 </span>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Hotel Property */}
+                          <td className="py-3.5 px-4 align-top text-xs text-slate-300">
+                            {displayHotelName ? (
+                              <div>
+                                <div className="flex items-center gap-1.5 font-medium text-slate-200">
+                                  <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  <span className="truncate">
+                                    {displayHotelName}
+                                  </span>
+                                </div>
+                                {matchedHotel?.city && (
+                                  <div className="text-[10px] text-slate-400 pl-5 mt-0.5">
+                                    {matchedHotel.city}
+                                  </div>
+                                )}
                               </div>
                             ) : (
                               <span className="text-slate-500 italic">
@@ -1492,6 +1599,8 @@ export default function CRM() {
                               </span>
                             )}
                           </td>
+
+                          {/* Pipeline Status */}
                           <td className="py-3.5 px-3 text-center align-top">
                             <span
                               className={`inline-block text-[11px] px-2.5 py-0.5 rounded-full font-semibold border ${st.bg}`}
@@ -1499,6 +1608,46 @@ export default function CRM() {
                               {st.label}
                             </span>
                           </td>
+
+                          {/* Stay Dates & Room / Budget */}
+                          <td className="py-3.5 px-3 text-center align-top">
+                            {lead.check_in_date ? (
+                              <div className="flex flex-col items-center">
+                                <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-200 bg-slate-950/60 border border-slate-800 px-2 py-0.5 rounded-md">
+                                  <Calendar className="w-3 h-3 text-indigo-400 shrink-0" />
+                                  <span>{lead.check_in_date}</span>
+                                </div>
+                                {lead.check_out_date && (
+                                  <div className="text-[10px] text-slate-400 mt-0.5">
+                                    to {lead.check_out_date}
+                                  </div>
+                                )}
+                              </div>
+                            ) : null}
+                            {lead.room_preference && (
+                              <div className="capitalize text-[11px] text-slate-300 mt-1 flex items-center justify-center gap-1">
+                                <BedDouble className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span className="truncate max-w-[110px]">
+                                  {lead.room_preference}
+                                </span>
+                              </div>
+                            )}
+                            {lead.budget && (
+                              <div className="text-[11px] font-semibold text-emerald-400 mt-0.5 flex items-center justify-center gap-0.5">
+                                <IndianRupee className="w-3 h-3" />
+                                <span>{lead.budget}</span>
+                              </div>
+                            )}
+                            {!lead.check_in_date &&
+                              !lead.room_preference &&
+                              !lead.budget && (
+                                <span className="text-slate-500 italic text-xs">
+                                  —
+                                </span>
+                              )}
+                          </td>
+
+                          {/* Lead Details & Notes */}
                           <td className="py-3.5 px-4 align-top text-xs text-slate-300 leading-relaxed">
                             <p
                               className="line-clamp-2"
@@ -1506,7 +1655,17 @@ export default function CRM() {
                             >
                               {lead.lead_details || "—"}
                             </p>
+                            {lead.created_at && (
+                              <div className="text-[10px] text-slate-500 mt-1">
+                                Added:{" "}
+                                {new Date(
+                                  lead.created_at,
+                                ).toLocaleDateString()}
+                              </div>
+                            )}
                           </td>
+
+                          {/* Calls Count & Last Called */}
                           <td className="py-3.5 px-3 text-center align-top">
                             <span className="inline-flex items-center justify-center min-w-[20px] h-5 rounded font-mono font-semibold text-xs text-slate-200 bg-slate-800 px-1.5 border border-slate-700">
                               {lead.call_count || 0}
@@ -1519,17 +1678,24 @@ export default function CRM() {
                               </div>
                             )}
                           </td>
+
+                          {/* Actions */}
                           <td className="py-3.5 px-4 text-center align-middle whitespace-nowrap">
                             <div className="flex items-center justify-center gap-1.5">
                               <button
-                                onClick={() => setCallModalLead(lead)}
+                                onClick={() =>
+                                  setCallModalLead({
+                                    ...lead,
+                                    lead_id: leadUniqueId,
+                                  })
+                                }
                                 className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-semibold rounded-lg shadow-sm transition-all cursor-pointer"
                               >
                                 <PhoneCall className="w-3 h-3" />
                                 <span>Call</span>
                               </button>
                               <button
-                                onClick={() => handleDelete(lead.lead_id)}
+                                onClick={() => handleDelete(leadUniqueId)}
                                 className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition-colors cursor-pointer"
                                 title="Delete lead"
                               >
