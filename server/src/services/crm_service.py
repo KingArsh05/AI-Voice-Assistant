@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
-from src.db.connection import get_db
+from src.db.connection import mongodb
 from src.models.crm_lead_model import CreateCRMLeadRequest, UpdateCRMLeadRequest
 
 logger = logging.getLogger(__name__)
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class CRMService:
     def __init__(self):
-        self.db = get_db()
+        self.db = mongodb.voice_calling_app_db
 
     def _format_lead(self, doc: dict) -> dict:
         if not doc:

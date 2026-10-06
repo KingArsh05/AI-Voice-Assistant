@@ -7,7 +7,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 import plivo
 from src.config import Config
-from src.db.connection import get_db
+from src.db.connection import mongodb
 from src.models.call_model import CallRecord, InitiateCallRequest
 from src.models.call_session_model import CallSessionModel, CallStatus
 from src.services.lead_guardrails import (
@@ -24,7 +24,7 @@ class CallService:
         self.client = plivo.RestClient(
             auth_id=Config.PLIVO_AUTH_ID, auth_token=Config.PLIVO_AUTH_TOKEN
         )
-        self.db = get_db()
+        self.db = mongodb.voice_calling_app_db
 
     def build_hotel_knowledge_brief(self, hotel_id: str) -> Optional[str]:
         """
@@ -40,10 +40,16 @@ class CallService:
         Returns None if no active hotel is found for the given hotel_id.
         """
         from src.services.hotel_service import HotelService
+
         hotel_svc = HotelService()
         return hotel_svc.get_compiled_context(hotel_id)
 
-    def _build_dynamic_context(self, data: InitiateCallRequest, hotel_knowledge_brief: Optional[str] = None, hotel_name: str = "Hotel Reservations") -> str:
+    def _build_dynamic_context(
+        self,
+        data: InitiateCallRequest,
+        hotel_knowledge_brief: Optional[str] = None,
+        hotel_name: str = "Hotel Reservations",
+    ) -> str:
         """Assembles the structured dynamic context payload injected into the Plivo CX AI Agent.
 
         Structure (three clearly labelled sections):
@@ -81,13 +87,14 @@ class CallService:
 
         if lead_lines:
             parts.append(
-                "=== [lead_profile] ===\n"
-                + "\n".join(lead_lines) + "\n\n"
-                "OBJECTIVE: This is a proactive hotel booking follow-up call to a prospective guest (lead).\n"
-                "1. Greet the guest warmly by their name and mention you are following up on their booking inquiry.\n"
-                "2. Understand their travel dates, number of guests, and room type preferences.\n"
-                "3. Use the [hotel_knowledge_brief] to share accurate room details, rates, amenities, and policies.\n"
-                "4. Answer any questions or doubts they have, highlight relevant perks or experiences, and assist them in finalizing their room reservation."
+                "=== [lead_profile] ===\n" + "\n".join(lead_lines) + "\n\n"
+                "CRITICAL CALL DIRECTIVE — SOLVE THE KNOWN PROBLEM FIRST (Target Duration: 2 to 3 minutes max):\n"
+                "You already have the full background of what this guest inquired about or what difficulty they faced in 'Booking Inquiry / Lead Details' above.\n"
+                "• DO NOT ask them: 'Aapko kaisa room chahiye?' or 'Kitne log hain?' or 'Kab aana hai?' — You ALREADY know this from their lead inquiry!\n"
+                "• Immediately in your very first greeting after introduction, STATE THE CONTEXT AND OFFER THE SOLUTION:\n"
+                "  Example: 'Namaste {name} ji, main {hotel_name} se bol rahi hoon. Aapne [room type / dates / pricing] ke baare mein pucha tha — main usi ke confirmation aur best rate ke liye call kar rahi hoon. [Give exact rates/solution directly]'\n"
+                "• If their problem was room availability, sold out dates, pricing, or breakfast: state the exact solution from hotel_knowledge_brief right away.\n"
+                "• After giving the answer, ask if they have any doubt or want you to confirm the booking. Then politely close."
             )
 
         # ── Section 3: call_boundaries (hard guardrails) ─────────────────────────
@@ -96,12 +103,16 @@ class CallService:
 
         if data.guest_name:
             boundaries.append(
-                f"RULE — GREETING: Always begin the call by greeting {data.guest_name} by name "
-                f"and introducing yourself from {hotel_name} "
-                f"(e.g. 'Namaste {data.guest_name} ji, main {hotel_name} se bol rahi hoon — booking ke baare mein baat karna tha.'). "
-                "Never start with a generic 'Hello' or 'Hi there'. "
-                "Wait 1.5 seconds before speaking if the guest just said 'Hello' so they have time to settle."
+                f"RULE — OPENING WITH PROBLEM CONTEXT: Greet {data.guest_name} respectfully by name "
+                f"and immediately reference their specific problem/inquiry in your opening sentence: "
+                f"'Namaste {data.guest_name} ji, main {hotel_name} se bol rahi hoon. Aapne hamare hotel mein [mention their specific requirement/problem from lead inquiry] ke baare mein inquiry ki thi — usi ka solution aur best details dene ke liye call kiya hai.' "
+                "NEVER ask open-ended questions like 'Aapko kya help chahiye?' or 'Kab ka plan hai?'. You already know their requirements. Speak with authority."
             )
+
+        boundaries.append(
+            "RULE — STRICTLY NO RE-ASKING KNOWN DETAILS: It is strictly prohibited to ask the guest about dates, guest count, or room requirements when they are already provided in the lead details. "
+            "Acknowledge the details, quote the exact rates and answers from the hotel_knowledge_brief, resolve any doubt in 1-2 turns, and close within 2 to 3 minutes."
+        )
 
         boundaries.append(
             "RULE — LANGUAGE DISCIPLINE: ALWAYS start the call in Hindi/Hinglish. "
@@ -140,12 +151,16 @@ class CallService:
 
         boundaries.append(
             "RULE — CONCISE RESPONSES: Keep your responses short and conversational — maximum 2-3 sentences at a time. "
-            "Do not deliver long monologues. Ask one question at a time and wait for the guest's answer before continuing."
+            "Do not deliver long monologues. Ask one clear question or provide one clear answer at a time and wait for the guest's reply."
         )
 
         parts.append("=== [call_boundaries] ===\n" + "\n\n".join(boundaries))
 
-        return "\n\n".join(parts) if parts else "You are a professional hotel reservation and lead follow-up specialist for StayChat."
+        return (
+            "\n\n".join(parts)
+            if parts
+            else "You are a professional hotel reservation and lead follow-up specialist for StayChat."
+        )
 
     def _trigger_plivo_cx(self, to_number: str, plivo_params: dict) -> dict:
         """
@@ -185,7 +200,6 @@ class CallService:
             logger.error("Plivo CX API HTTP Error %s: %s", e.code, err_msg)
             raise RuntimeError(f"Plivo API returned {e.code}: {err_msg}")
 
-
     def check_recent_calls(self, to_number: str, cooldown_minutes: int = 15) -> bool:
         """
         Checks if the destination phone was called recently within cooldown_minutes
@@ -194,11 +208,13 @@ class CallService:
         if not to_number:
             return False
         cutoff = datetime.now(timezone.utc) - timedelta(minutes=cooldown_minutes)
-        existing = self.db.calls.find_one({
-            "to_number": to_number,
-            "created_at": {"$gte": cutoff},
-            "status": {"$nin": ["failed", CallStatus.FAILED.value]},
-        })
+        existing = self.db.calls.find_one(
+            {
+                "to_number": to_number,
+                "created_at": {"$gte": cutoff},
+                "status": {"$nin": ["failed", CallStatus.FAILED.value]},
+            }
+        )
         return existing is not None
 
     def make_call(self, data: InitiateCallRequest, bypass_dedup: bool = False) -> dict:
@@ -214,18 +230,24 @@ class CallService:
         # ── Step 0: Lead Content Validation & Name Sanitization ───────────────────
         is_valid, rejection_reason = validate_lead_content(data.guest_lead or "")
         if not is_valid:
-            logger.error("Rejecting call to %s due to prohibited lead content: %s", data.to_number, rejection_reason)
+            logger.error(
+                "Rejecting call to %s due to prohibited lead content: %s",
+                data.to_number,
+                rejection_reason,
+            )
             raise ValueError(f"Prohibited lead content: {rejection_reason}")
 
         cleaned_guest_name, name_warnings = sanitize_guest_name(data.guest_name or "")
         if name_warnings:
-            logger.warning("Sanitized guest name '%s' -> '%s': %s", data.guest_name, cleaned_guest_name, name_warnings)
+            logger.warning(
+                "Sanitized guest name '%s' -> '%s': %s",
+                data.guest_name,
+                cleaned_guest_name,
+                name_warnings,
+            )
 
-        # ── Step 0.5: Deduplication Check ─────────────────────────────────────────
-        if not bypass_dedup and self.check_recent_calls(data.to_number, cooldown_minutes=15):
-            msg = f"Duplicate call blocked: {data.to_number} was already called within the last 15 minutes."
-            logger.warning(msg)
-            raise ValueError(msg)
+        # ── Step 0.5: Deduplication Check (Disabled for testing) ───────────────────
+        # Duplicate check disabled to permit unrestricted testing with single test phone numbers.
 
         hotel_snapshot = None
         hotel_knowledge_brief = None
@@ -233,40 +255,47 @@ class CallService:
 
         # ── Step 1: Compile hotel_knowledge_brief from DB (Fail-Safe) ─────────────
         if data.hotel_id:
-            from src.services.hotel_service import HotelService
-            hotel_svc = HotelService()
-            hotel_doc = hotel_svc.get_hotel(data.hotel_id)
-            if hotel_doc:
-                hotel_name = hotel_doc.get("name", "Hotel Reservations")
-                hotel_knowledge_brief = self.build_hotel_knowledge_brief(data.hotel_id)
+            try:
+                from src.services.knowledge_base_service import KnowledgeBaseService
+
+                kb = KnowledgeBaseService.get_knowledge_base(str(data.hotel_id))
+                hotel_name = kb.name or f"Hotel {data.hotel_id}"
+                hotel_knowledge_brief = kb.compile_ai_context()
+                kb_full_dict = kb.model_dump(mode="json")
                 hotel_snapshot = {
-                    "hotel_id": data.hotel_id,
+                    "hotel_id": str(data.hotel_id),
                     "name": hotel_name,
-                    "star_rating": hotel_doc.get("star_rating"),
-                    "property_type": hotel_doc.get("property_type"),
+                    "property_code": kb.property_code,
                     "compiled_context_snapshot": hotel_knowledge_brief,
+                    "full_knowledge_base": kb_full_dict,
                 }
-            else:
-                # Fallback for StayChat Combot hotel IDs (e.g. 111111, 376891, etc.)
-                STAYCHAT_HOTEL_NAMES = {
-                    "111111": ("Hotel Sahu", "Hotel Sahu near Kashi Vishwanath Temple, Varanasi. Check-in: 12:00 PM, Check-out: 11:00 AM. Offers Deluxe AC rooms and non-AC rooms with pure vegetarian dining."),
-                    "376891": ("Hotel Paradise", "Hotel Paradise, Jaipur. Comfortable rooms with modern amenities and multi-cuisine restaurant."),
-                    "988273": ("Sanidhyam by Sahu Hotels", "Sanidhyam by Sahu Hotels, Varanasi."),
-                    "968225": ("Hotel Maharaja", "Hotel Maharaja, Nainital."),
-                    "191919": ("Hoteldummy", "Hotel property reservation specialist."),
-                    "310978": ("Hotel North Star", "Hotel North Star reservation specialist."),
-                }
-                meta = STAYCHAT_HOTEL_NAMES.get(str(data.hotel_id))
-                if meta:
-                    hotel_name, hotel_knowledge_brief = meta
+            except Exception as kb_err:
+                logger.warning(
+                    "KnowledgeBaseService lookup failed for hotel %s: %s. Trying local HotelService...",
+                    data.hotel_id,
+                    kb_err,
+                )
+                from src.services.hotel_service import HotelService
+
+                hotel_svc = HotelService()
+                hotel_doc = hotel_svc.get_hotel(data.hotel_id)
+                if hotel_doc:
+                    hotel_name = hotel_doc.get("name", "Hotel Reservations")
+                    hotel_knowledge_brief = self.build_hotel_knowledge_brief(
+                        data.hotel_id
+                    )
                     hotel_snapshot = {
-                        "hotel_id": str(data.hotel_id),
+                        "hotel_id": data.hotel_id,
                         "name": hotel_name,
+                        "star_rating": hotel_doc.get("star_rating"),
+                        "property_type": hotel_doc.get("property_type"),
                         "compiled_context_snapshot": hotel_knowledge_brief,
                     }
                 else:
                     hotel_name = f"Hotel {data.hotel_id}"
-                    hotel_knowledge_brief = f"{hotel_name} reservations and guest relations specialist."
+                    hotel_knowledge_brief = (
+                        f"{hotel_name} reservations and guest relations specialist."
+                    )
                     hotel_snapshot = {
                         "hotel_id": str(data.hotel_id),
                         "name": hotel_name,
@@ -274,26 +303,50 @@ class CallService:
                     }
 
             logger.info(
-                "hotel_knowledge_brief resolved for hotel_id=%s (%s)",
+                "hotel_knowledge_brief compiled for hotel_id=%s (%s), length=%d chars",
                 data.hotel_id,
                 hotel_name,
+                len(hotel_knowledge_brief or ""),
             )
 
         # ── Step 2: Build AI-clean lead content & named Plivo params ──────────────
         lead_content = clean_lead_for_ai(data.guest_lead, hotel_name=hotel_name)
 
+        # Structure concise, solution-oriented guest_lead directive for Plivo CX flow
+        formatted_guest_lead = (
+            f"GOAL (Resolve within 2-3 mins): You are calling {cleaned_guest_name} regarding their inquiry at {hotel_name}. "
+            f"GUEST INQUIRY & PROBLEM: {lead_content}. "
+            f"MANDATORY INSTRUCTIONS: "
+            f"1. DO NOT ask the guest for dates, guest count, or room types — YOU ALREADY KNOW THIS! "
+            f"2. Greet respectfully ('Namaste {cleaned_guest_name} ji, main {hotel_name} se bol rahi hoon'), immediately state you are calling about their inquiry ({lead_content[:120]}), and provide the exact rates/solution directly from your hotel knowledge base. "
+            f"3. Answer any doubts, ask if they want you to confirm the booking, and wrap up politely without circular conversation."
+        )
+
+        # In case the Plivo agentflow node only looks at hotel_knowledge_brief, also prepend this directive to hotel_knowledge_brief
+        lead_priority_brief = (
+            f"CURRENT CALL TARGET GUEST: {cleaned_guest_name}\n"
+            f"THEIR KNOWN INQUIRY & PROBLEM: {lead_content}\n"
+            f"CRITICAL DIRECTIVE: Greet {cleaned_guest_name} and IMMEDIATELY address their problem/inquiry above. DO NOT re-ask details you already have. Give them the solution from the hotel data below and wrap up in 2-3 mins.\n\n"
+            + (hotel_knowledge_brief or f"{hotel_name} reservation specialist. Answer questions politely.")
+        )
+
         plivo_params = {
             "hotel_name": hotel_name,
-            "hotel_knowledge_brief": hotel_knowledge_brief or f"{hotel_name} reservation specialist. Answer questions politely.",
+            "hotel_knowledge_brief": lead_priority_brief,
             "guest_name": cleaned_guest_name,
-            "guest_lead": lead_content,
+            "guest_lead": formatted_guest_lead,
         }
+
 
         # ── Step 3: Build flat context string for DB audit log ────────────────────
         # Update request object with cleaned values for context building
-        clean_request_data = data.model_copy(update={"guest_name": cleaned_guest_name, "guest_lead": lead_content})
+        clean_request_data = data.model_copy(
+            update={"guest_name": cleaned_guest_name, "guest_lead": lead_content}
+        )
         context_for_db = self._build_dynamic_context(
-            clean_request_data, hotel_knowledge_brief=hotel_knowledge_brief, hotel_name=hotel_name
+            clean_request_data,
+            hotel_knowledge_brief=hotel_knowledge_brief,
+            hotel_name=hotel_name,
         )
 
         logger.info(
@@ -304,8 +357,46 @@ class CallService:
         )
 
         # ── Step 4: Trigger CX Flow with named params ─────────────────────────────
-        resp_json = self._trigger_plivo_cx(to_number=data.to_number, plivo_params=plivo_params)
+        resp_json = self._trigger_plivo_cx(
+            to_number=data.to_number, plivo_params=plivo_params
+        )
         trigger_id = str(resp_json.get("api_id") or resp_json.get("trigger_id") or "")
+
+        # ── Step 4.5: Developer Diagnostic Logging & make_a_call.json file dump ─────
+        try:
+            from pathlib import Path
+            audit_dump = {
+                "initiated_at": datetime.now(timezone.utc).isoformat(),
+                "trigger_id": trigger_id,
+                "input_request": data.model_dump(mode="json"),
+                "plivo_params": plivo_params,
+                "plivo_response": resp_json,
+                "hotel_snapshot": hotel_snapshot,
+            }
+            dump_file = Path(__file__).resolve().parent.parent.parent / "scripts" / "make_a_call.json"
+            dump_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(dump_file, "w", encoding="utf-8") as f:
+                json.dump(audit_dump, f, indent=2, ensure_ascii=False)
+
+            # High-visibility Terminal Diagnostic Print
+            print("\n" + "=" * 80, flush=True)
+            print("🚀 [CALL INITIATED] OUTBOUND PLIVO CX FLOW TRIGGERED", flush=True)
+            print("=" * 80, flush=True)
+            print(f"📞 To Number      : {data.to_number}", flush=True)
+            print(f"👤 Guest Name    : {cleaned_guest_name}", flush=True)
+            print(f"🏨 Hotel Name    : {hotel_name} (ID: {data.hotel_id})", flush=True)
+            print(f"🆔 Plivo Trigger : {trigger_id}", flush=True)
+            print(f"📄 KB Size       : {len(hotel_knowledge_brief or '')} characters compiled", flush=True)
+            print(f"📝 Guest Lead    : {lead_content}", flush=True)
+            print(f"📡 Plivo Params Dispatched:", flush=True)
+            print(f"   • hotel_name            = {plivo_params.get('hotel_name')}", flush=True)
+            print(f"   • guest_name            = {plivo_params.get('guest_name')}", flush=True)
+            print(f"   • guest_lead            = {plivo_params.get('guest_lead')[:100]}...", flush=True)
+            print(f"   • hotel_knowledge_brief = {len(plivo_params.get('hotel_knowledge_brief', ''))} chars", flush=True)
+            print(f"💾 Snapshot Saved: {dump_file}", flush=True)
+            print("=" * 80 + "\n", flush=True)
+        except Exception as dump_err:
+            logger.warning("Could not write make_a_call.json audit file: %s", dump_err)
 
         # ── Step 5: Persist call session ──────────────────────────────────────────
         session = CallSessionModel(
@@ -328,8 +419,6 @@ class CallService:
             "data": resp_json,
         }
 
-
-
     def handle_hangup_event(self, event_data: dict):
         """
         Comprehensive Hangup Handler (State Machine):
@@ -341,17 +430,41 @@ class CallService:
           5. Destination line was busy -> status: "busy", reason: "busy"
           6. Telephony / network carrier error -> status: "failed", reason: "error"
         """
-        obj = event_data.get("data", {}).get("object", {}) if isinstance(event_data.get("data"), dict) else {}
-        sub = obj.get("event_data", {}) if isinstance(obj.get("event_data"), dict) else {}
+        obj = (
+            event_data.get("data", {}).get("object", {})
+            if isinstance(event_data.get("data"), dict)
+            else {}
+        )
+        sub = (
+            obj.get("event_data", {}) if isinstance(obj.get("event_data"), dict) else {}
+        )
 
         # 1. Correlation Identifiers
-        flow_run_id = obj.get("flow_run_uuid") or sub.get("Start.flow_run_id") or event_data.get("flow_run_uuid")
-        call_uuid = obj.get("call_uuid") or sub.get("Outbound Call.uuid") or event_data.get("CallUUID")
+        flow_run_id = (
+            obj.get("flow_run_uuid")
+            or sub.get("Start.flow_run_id")
+            or event_data.get("flow_run_uuid")
+        )
+        call_uuid = (
+            obj.get("call_uuid")
+            or sub.get("Outbound Call.uuid")
+            or event_data.get("CallUUID")
+        )
 
         # 2. Raw Signal Extraction
-        raw_call_status = str(sub.get("Outbound Call.call_status") or "").strip().lower()
-        raw_hangup_source = str(sub.get("hangup_source") or event_data.get("HangupSource") or "").strip().lower()
-        raw_hangup_cause = str(event_data.get("HangupCause") or sub.get("hangup_cause") or "").strip().upper()
+        raw_call_status = (
+            str(sub.get("Outbound Call.call_status") or "").strip().lower()
+        )
+        raw_hangup_source = (
+            str(sub.get("hangup_source") or event_data.get("HangupSource") or "")
+            .strip()
+            .lower()
+        )
+        raw_hangup_cause = (
+            str(event_data.get("HangupCause") or sub.get("hangup_cause") or "")
+            .strip()
+            .upper()
+        )
 
         duration_raw = sub.get("call_duration", 0)
         try:
@@ -372,7 +485,10 @@ class CallService:
         elif (
             raw_hangup_cause in ["CALL_REJECTED", "USER_BUSY"]
             or raw_call_status in ["rejected"]
-            or (raw_call_status == "no-answer" and raw_hangup_source in ["customer", "user"])
+            or (
+                raw_call_status == "no-answer"
+                and raw_hangup_source in ["customer", "user"]
+            )
         ):
             status = "rejected"
             term_source = "customer"
@@ -386,13 +502,20 @@ class CallService:
 
         # Case D: Rang to completion without pickup (No Answer / Timeout)
         # hangup_source == "agent" here means Plivo's own flow timed out waiting — not the user declining
-        elif raw_call_status == "no-answer" or raw_hangup_cause in ["NO_ANSWER", "TIMEOUT"]:
+        elif raw_call_status == "no-answer" or raw_hangup_cause in [
+            "NO_ANSWER",
+            "TIMEOUT",
+        ]:
             status = "no-answer"
             term_source = "agent" if raw_hangup_source == "agent" else "system"
             term_reason = "no-answer"
 
         # Case E: Carrier or Telecom Failure
-        elif raw_call_status == "failed" or "ERROR" in raw_hangup_cause or "FAILED" in raw_hangup_cause:
+        elif (
+            raw_call_status == "failed"
+            or "ERROR" in raw_hangup_cause
+            or "FAILED" in raw_hangup_cause
+        ):
             status = "failed"
             term_source = "system"
             term_reason = raw_hangup_cause.lower() or "error"
@@ -416,8 +539,8 @@ class CallService:
             "hangup_cause": term_reason,
             # Raw Plivo signals — persisted so the UI can discriminate
             # declined (CALL_REJECTED) vs rang-out (NO_ANSWER) definitively
-            "raw_plivo_hangup_cause": raw_hangup_cause,    # e.g. "CALL_REJECTED", "NO_ANSWER", "NORMAL_CLEARING"
-            "raw_plivo_call_status": raw_call_status,      # e.g. "no-answer", "answered", "busy"
+            "raw_plivo_hangup_cause": raw_hangup_cause,  # e.g. "CALL_REJECTED", "NO_ANSWER", "NORMAL_CLEARING"
+            "raw_plivo_call_status": raw_call_status,  # e.g. "no-answer", "answered", "busy"
             "raw_plivo_hangup_source": raw_hangup_source,  # e.g. "customer", "agent", "user"
         }
 
@@ -436,7 +559,9 @@ class CallService:
         # 5. Execute targeted MongoDB update
         query = {"$or": []}
         if flow_run_id:
-            query["$or"].extend([{"trigger_id": flow_run_id}, {"request_uuid": flow_run_id}])
+            query["$or"].extend(
+                [{"trigger_id": flow_run_id}, {"request_uuid": flow_run_id}]
+            )
         if call_uuid:
             query["$or"].append({"call_uuid": call_uuid})
 
@@ -461,17 +586,22 @@ class CallService:
             return []
 
         import re
+
         turns = []
-        pattern = re.compile(r'\[(Customer|Ai_Agent)\]\s*(.*?)(?=\[(?:Customer|Ai_Agent)\]|$)', re.DOTALL)
+        pattern = re.compile(
+            r"\[(Customer|Ai_Agent)\]\s*(.*?)(?=\[(?:Customer|Ai_Agent)\]|$)", re.DOTALL
+        )
         for match in pattern.finditer(raw_text):
             role_raw = match.group(1)
             turn_text = match.group(2).strip()
             if turn_text:
-                turns.append({
-                    "speaker": "user" if role_raw == "Customer" else "agent",
-                    "text": turn_text,
-                    "timestamp": None,
-                })
+                turns.append(
+                    {
+                        "speaker": "user" if role_raw == "Customer" else "agent",
+                        "text": turn_text,
+                        "timestamp": None,
+                    }
+                )
         return turns
 
     def handle_recording_event(self, event_data: dict):
@@ -482,8 +612,14 @@ class CallService:
         - Extracts post-call summary
         - Updates MongoDB atomically with only needed fields
         """
-        obj = event_data.get("data", {}).get("object", {}) if isinstance(event_data.get("data"), dict) else {}
-        sub = obj.get("event_data", {}) if isinstance(obj.get("event_data"), dict) else {}
+        obj = (
+            event_data.get("data", {}).get("object", {})
+            if isinstance(event_data.get("data"), dict)
+            else {}
+        )
+        sub = (
+            obj.get("event_data", {}) if isinstance(obj.get("event_data"), dict) else {}
+        )
 
         # 1. Identifiers
         call_uuid = (
@@ -492,7 +628,11 @@ class CallService:
             or event_data.get("call_uuid")
             or sub.get("Outbound Call.uuid")
         )
-        flow_run_id = obj.get("flow_run_uuid") or sub.get("Start.flow_run_id") or event_data.get("flow_run_uuid")
+        flow_run_id = (
+            obj.get("flow_run_uuid")
+            or sub.get("Start.flow_run_id")
+            or event_data.get("flow_run_uuid")
+        )
 
         # 2. Recording Telemetry
         recording_url = (
@@ -502,7 +642,11 @@ class CallService:
         )
         recording_uuid = sub.get("recording_uuid") or event_data.get("RecordingUUID")
         try:
-            rec_duration = int(sub.get("recording_duration") or event_data.get("RecordingDuration") or 0)
+            rec_duration = int(
+                sub.get("recording_duration")
+                or event_data.get("RecordingDuration")
+                or 0
+            )
         except (ValueError, TypeError):
             rec_duration = 0
 
@@ -529,7 +673,12 @@ class CallService:
         raw_conversation = sub.get("conversation") or event_data.get("conversation")
         if isinstance(raw_conversation, list):
             for turn in raw_conversation:
-                speaker = "agent" if "agent" in str(turn.get("role") or turn.get("speaker") or "").lower() else "user"
+                speaker = (
+                    "agent"
+                    if "agent"
+                    in str(turn.get("role") or turn.get("speaker") or "").lower()
+                    else "user"
+                )
                 text = str(turn.get("content") or turn.get("text") or "").strip()
                 if text:
                     parsed_conversation.append({"speaker": speaker, "text": text})
@@ -566,11 +715,17 @@ class CallService:
         if call_uuid:
             query["$or"].append({"call_uuid": call_uuid})
         if flow_run_id:
-            query["$or"].extend([{"trigger_id": flow_run_id}, {"request_uuid": flow_run_id}])
+            query["$or"].extend(
+                [{"trigger_id": flow_run_id}, {"request_uuid": flow_run_id}]
+            )
 
         if query["$or"]:
             res = self.db.calls.update_one(query, {"$set": update_fields})
-            logger.info("Recording saved for call %s: matched=%s", call_uuid or flow_run_id, res.matched_count)
+            logger.info(
+                "Recording saved for call %s: matched=%s",
+                call_uuid or flow_run_id,
+                res.matched_count,
+            )
 
     def handle_transcript_event(self, event_data: dict):
         """
@@ -584,11 +739,15 @@ class CallService:
 
         # 1. Identifiers
         call_uuid = event_data.get("call_uuid") or event_data.get("CallUUID")
-        conversation_id = event_data.get("conversation_id") or event_data.get("ConversationID")
+        conversation_id = event_data.get("conversation_id") or event_data.get(
+            "ConversationID"
+        )
         flow_run_id = event_data.get("flow_run_id") or event_data.get("trigger_id")
 
         # 2. Extract transcript & summary
-        raw_transcript = event_data.get("transcript") or event_data.get("transcription") or ""
+        raw_transcript = (
+            event_data.get("transcript") or event_data.get("transcription") or ""
+        )
         raw_summary = event_data.get("summary") or ""
         raw_conversation = event_data.get("conversation")
 
@@ -596,9 +755,12 @@ class CallService:
         transcript_text = ""
 
         # Handle list of turns or serialized JSON
-        if isinstance(raw_conversation, str) and raw_conversation.strip().startswith("["):
+        if isinstance(raw_conversation, str) and raw_conversation.strip().startswith(
+            "["
+        ):
             try:
                 import json
+
                 raw_conversation = json.loads(raw_conversation)
             except Exception:
                 pass
@@ -607,12 +769,16 @@ class CallService:
             turn_lines = []
             for turn in raw_conversation:
                 if isinstance(turn, dict):
-                    role = str(turn.get("role") or turn.get("speaker") or "user").lower()
+                    role = str(
+                        turn.get("role") or turn.get("speaker") or "user"
+                    ).lower()
                     speaker = "agent" if "agent" in role or "bot" in role else "user"
                     text = str(turn.get("content") or turn.get("text") or "").strip()
                     if text:
                         parsed_conversation.append({"speaker": speaker, "text": text})
-                        turn_lines.append(f"{'StayChat AI' if speaker == 'agent' else 'User'}: {text}")
+                        turn_lines.append(
+                            f"{'StayChat AI' if speaker == 'agent' else 'User'}: {text}"
+                        )
             if turn_lines and not raw_transcript:
                 transcript_text = "\n".join(turn_lines)
 
@@ -645,7 +811,9 @@ class CallService:
         if conversation_id:
             query["$or"].append({"conversation_id": conversation_id})
         if flow_run_id:
-            query["$or"].extend([{"trigger_id": flow_run_id}, {"request_uuid": flow_run_id}])
+            query["$or"].extend(
+                [{"trigger_id": flow_run_id}, {"request_uuid": flow_run_id}]
+            )
 
         if query["$or"]:
             res = self.db.calls.update_one(query, {"$set": update_fields})

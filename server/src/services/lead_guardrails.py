@@ -146,8 +146,8 @@ def clean_lead_for_ai(raw_lead: Optional[str], hotel_name: str = "the hotel") ->
     for pattern in OPERATOR_META_PATTERNS:
         lead = re.sub(pattern, "", lead, flags=re.IGNORECASE).strip()
 
-    # Cap maximum length to avoid prompt bloat
-    if len(lead) > 300:
-        lead = lead[:297] + "..."
+    # Preserve rich inquiry context while avoiding unbounded prompt bloat
+    if len(lead) > 800:
+        lead = lead[:797] + "..."
 
     return lead

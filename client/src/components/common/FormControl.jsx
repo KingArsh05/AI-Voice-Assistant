@@ -394,6 +394,7 @@ export const StandaloneSelect = ({
   disabled = false,
   searchable = false,
   size = "md",
+  dropUp = false,
   className = "",
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -430,15 +431,15 @@ export const StandaloneSelect = ({
   return (
     <div
       ref={dropdownRef}
-      className={`relative select-none ${isOpen ? "z-50" : "z-auto"} ${className}`}
+      className={`relative select-none ${isOpen ? "z-[70]" : "z-10"} ${className}`}
     >
       <button
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`w-full bg-slate-900/90 border border-slate-800 rounded-xl text-left flex items-center justify-between gap-2.5 transition-all duration-200 outline-none hover:border-slate-700 hover:bg-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed ${
-          isOpen ? "border-indigo-500 ring-2 ring-indigo-500/20" : ""
-        } ${size === "sm" ? "px-3 py-1.5 text-xs" : "px-3.5 py-2.5 text-sm"}`}
+        className={`w-full bg-slate-900/95 border border-slate-800 rounded-xl text-left flex items-center justify-between gap-2.5 transition-all duration-200 outline-none hover:border-slate-700 hover:bg-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed ${
+          isOpen ? "border-indigo-500 ring-2 ring-indigo-500/20 bg-slate-900" : ""
+        } ${size === "sm" ? "px-3 py-2 text-xs h-9" : "px-3.5 py-2.5 text-xs h-10"}`}
       >
         <div className="flex items-center gap-2 min-w-0 flex-1">
           {selectedOption?.icon && (
@@ -465,7 +466,11 @@ export const StandaloneSelect = ({
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1.5 max-h-60 bg-slate-900/98 backdrop-blur-xl border border-slate-800 rounded-xl shadow-2xl z-[100] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+        <div
+          className={`absolute ${
+            dropUp ? "bottom-full mb-1.5" : "top-full mt-1.5"
+          } left-0 right-0 max-h-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl shadow-black/80 z-[999] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100`}
+        >
           {searchable && (
             <div className="p-2 border-b border-slate-800/80 bg-slate-950/60 sticky top-0 z-10 flex items-center gap-2">
               <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />

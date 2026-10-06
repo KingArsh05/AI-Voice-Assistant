@@ -1,12 +1,11 @@
-import React from "react";
 import { NavLink } from "react-router-dom";
-import { PhoneCall, ListFilter, Bot, Activity, PhoneIncoming, Building2, ListOrdered, Users } from "lucide-react";
+import { PhoneCall, ListFilter, Bot, Activity, Building2, ListOrdered, Users } from "lucide-react";
 
 export default function Sidebar() {
   const navItems = [
     {
       name: "CRM Leads",
-      path: "/crm",
+      path: "/staychat-crm",
       icon: Users,
       badge: "Database",
     },
@@ -40,7 +39,7 @@ export default function Sidebar() {
     <aside className="w-64 bg-slate-900/90 border-r border-slate-800/80 backdrop-blur-xl flex flex-col shrink-0 h-screen sticky top-0">
       {/* Brand / Logo */}
       <div className="p-6 border-b border-slate-800/80 flex items-center gap-3">
-        <div className="p-2.5 bg-gradient-to-tr from-indigo-600 to-violet-500 rounded-xl text-white shadow-lg shadow-indigo-600/30">
+        <div className="p-2.5 bg-linear-to-tr from-indigo-600 to-violet-500 rounded-xl text-white shadow-lg shadow-indigo-600/30">
           <Bot className="w-6 h-6" />
         </div>
         <div>

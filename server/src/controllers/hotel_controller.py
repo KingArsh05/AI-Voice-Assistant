@@ -10,9 +10,17 @@ hotel_service = HotelService()
 
 @hotel_bp.route("", methods=["GET"])
 def list_hotels():
-    """Returns list of hotels for configuration panel or dropdown selectors."""
+    """Returns list of hotels for configuration panel or dropdown selectors.
+    Supports ?source=true to query source DB (staychat_clone_db).
+    """
+    source_db = request.args.get("source", "false").lower() == "true"
     active_only = request.args.get("active_only", "false").lower() == "true"
     try:
+        if source_db:
+            from src.services.knowledge_base_service import KnowledgeBaseService
+            hotels = KnowledgeBaseService.list_hotels()
+            return jsonify({"success": True, "count": len(hotels), "data": hotels}), 200
+
         hotels = hotel_service.list_hotels(active_only=active_only)
         return jsonify({"success": True, "count": len(hotels), "data": hotels}), 200
     except Exception as e:

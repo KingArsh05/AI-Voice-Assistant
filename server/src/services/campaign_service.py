@@ -5,7 +5,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Tuple
 
-from src.db.connection import get_db
+from src.db.connection import mongodb
 from src.models.campaign_model import (
     CreateCampaignRequest,
     CampaignStatus,
@@ -39,7 +39,7 @@ _workers_lock = threading.Lock()
 
 class CampaignService:
     def __init__(self):
-        self.db = get_db()
+        self.db = mongodb.voice_calling_app_db
         self.call_service = CallService()
 
     def _validate_campaign_leads(self, leads: List[Any], hotel_id: Optional[str]) -> Tuple[List[dict], List[str]]:

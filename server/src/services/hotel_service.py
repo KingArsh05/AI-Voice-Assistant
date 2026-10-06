@@ -2,7 +2,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
-from src.db.connection import get_db
+from src.db.connection import mongodb
 from src.models.hotel_model import HotelModel, slugify
 
 logger = logging.getLogger(__name__)
@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 class HotelService:
     def __init__(self):
-        self.db = get_db()
+        self.db = mongodb.voice_calling_app_db
 
     def list_hotels(self, active_only: bool = False) -> List[dict]:
         """Returns all configured hotels with summary info for selectors & sidebars."""

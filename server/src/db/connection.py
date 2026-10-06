@@ -1,44 +1,54 @@
-import logging
+import time
+
 from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
-from ..config import Config
+from pymongo.errors import ServerSelectionTimeoutError
 
-logger = logging.getLogger(__name__)
+from src.config import Config
 
 
-class Database:
-    client: MongoClient = None
-    db = None
+class MongoDB:
+    def __init__(self):
+        self.client = MongoClient(
+            Config.MONGO_URI,
+            serverSelectionTimeoutMS=5000,
+        )
 
-    @classmethod
-    def connect(cls):
-        """Initializes thread-safe MongoDB connection pool."""
-        if cls.client is None:
-            try:
-                cls.client = MongoClient(
-                    Config.MONGO_URI, maxPoolSize=50, serverSelectionTimeoutMS=5000
-                )
+        self.voice_calling_app_db = self.client[Config.MONGODB_DB_NAME]
+        self.staychat_clone_db = self.client[Config.MONGODB_SOURCE_DB_NAME]
 
-                cls.client.admin.command("ping")
-                cls.db = cls.client[Config.MONGO_DB_NAME]
-                logger.info("✅ MongoDB connected: %s", Config.MONGO_DB_NAME)
-                print(f"✅ MongoDB connected: {Config.MONGO_DB_NAME}")
+    def connect(self) -> bool:
+        start_time = time.perf_counter()
 
-            except ConnectionFailure as e:
-                logger.error("❌ Failed to connect to MongoDB: %s", e)
-                raise e
+        try:
+            self.client.admin.command("ping")
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
 
-    @classmethod
-    def close(cls):
-        """Closes connection pool on shutdown."""
-        if cls.client:
-            cls.client.close()
-            cls.client = None
-            cls.db = None
-            logger.info("✅ MongoDB connection closed.")
+            print("\n" + "=" * 55)
+            print("  DATABASE CONNECTION")
+            print("=" * 55)
+            print("  Status     : ✅ Connected")
+            print("  Database   :", Config.MONGODB_DB_NAME)
+            print("  Source DB  :", Config.MONGODB_SOURCE_DB_NAME)
+            print(f"  Response   : {elapsed_ms:.2f} ms")
+            print("=" * 55 + "\n")
 
-def get_db():
-    """Returns or creates the database connection."""
-    if Database.db is None:
-        Database.connect()
-    return Database.db
+            return True
+
+        except ServerSelectionTimeoutError as error:
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+
+            print("\n" + "=" * 55)
+            print("  DATABASE CONNECTION")
+            print("=" * 55)
+            print("  Status     : ❌ Failed")
+            print(f"  Response   : {elapsed_ms:.2f} ms")
+            print(f"  Error      : {error}")
+            print("=" * 55 + "\n")
+
+            return False
+
+    def close(self) -> None:
+        self.client.close()
+
+
+mongodb = MongoDB()
