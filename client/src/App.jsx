@@ -1,15 +1,27 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
-import MakeCall from "./components/MakeCall";
-import BulkCalls from "./components/BulkCalls";
-import CallLogs from "./components/CallLogs";
-import Hotels from "./components/Hotels";
-import StayChatCRM from "./components/staychat_leads/StayChatCRM";
+
+import MakeSingleCall from "./components/MakeSingleCall";
+import MakeBulkCalls from "./components/MakeBulkCalls";
 
 export default function App() {
   return (
     <BrowserRouter>
+      <ToastContainer
+        position="top-right"
+        autoClose={4000}
+        hideProgressBar={false}
+        newestOnTop
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="dark"
+      />
       <div className="flex h-screen bg-slate-950 text-slate-100 font-sans overflow-hidden">
         {/* Left fixed Sidebar */}
         <Sidebar />
@@ -20,14 +32,12 @@ export default function App() {
 
           <main className="flex-1 overflow-y-auto flex flex-col">
             <Routes>
-              <Route path="/" element={<Navigate to="/staychat-crm" replace />} />
-              <Route path="/crm" element={<Navigate to="/staychat-crm" replace />} />
-              <Route path="/staychat-crm" element={<StayChatCRM />} />
-              <Route path="/make-call" element={<MakeCall />} />
-              <Route path="/bulk-calls" element={<BulkCalls />} />
-              <Route path="/call-logs" element={<CallLogs />} />
-              <Route path="/hotels" element={<Hotels />} />
-              <Route path="*" element={<Navigate to="/staychat-crm" replace />} />
+              <Route
+                path="/"
+                element={<Navigate to="/make-single-call" replace />}
+              />
+              <Route path="/make-single-call" element={<MakeSingleCall />} />
+              <Route path="/make-bulk-calls" element={<MakeBulkCalls />} />
             </Routes>
           </main>
         </div>

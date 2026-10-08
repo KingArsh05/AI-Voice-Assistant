@@ -1,6 +1,16 @@
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useFormContext } from "react-hook-form";
-import { ChevronDown, Search, Minus, Plus, Check } from "lucide-react";
+import {
+  ChevronDown,
+  Search,
+  Minus,
+  Plus,
+  Check,
+  Upload,
+  FileSpreadsheet,
+  X,
+  AlertCircle,
+} from "lucide-react";
 import { COUNTRY_CODES } from "../../utils/countryCodes";
 
 /**
@@ -469,10 +479,10 @@ export const StandaloneSelect = ({
         <div
           className={`absolute ${
             dropUp ? "bottom-full mb-1.5" : "top-full mt-1.5"
-          } left-0 right-0 max-h-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl shadow-black/80 z-[999] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100`}
+          } left-0 min-w-full w-max max-w-sm max-h-64 bg-slate-900/98 backdrop-blur-2xl border border-slate-700/80 rounded-xl shadow-2xl shadow-black/90 z-[999] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100`}
         >
           {searchable && (
-            <div className="p-2 border-b border-slate-800/80 bg-slate-950/60 sticky top-0 z-10 flex items-center gap-2">
+            <div className="p-2 border-b border-slate-800 bg-slate-950/80 sticky top-0 z-10 flex items-center gap-2">
               <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />
               <input
                 ref={searchInputRef}
@@ -480,11 +490,11 @@ export const StandaloneSelect = ({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search..."
-                className="w-full bg-transparent text-xs text-slate-200 outline-none placeholder:text-slate-500 py-1 pr-2"
+                className="w-full bg-transparent text-xs text-slate-100 outline-none placeholder:text-slate-500 py-1 pr-2"
               />
             </div>
           )}
-          <div className="overflow-y-auto p-1 divide-y divide-slate-800/30">
+          <div className="overflow-y-auto p-1 divide-y divide-slate-800/40 scrollbar-thin [scrollbar-color:#334155_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-700/60 [&::-webkit-scrollbar-thumb]:rounded-full">
             {filteredOptions.length > 0 ? (
               filteredOptions.map((opt) => {
                 const isSelected = String(value) === String(opt.value);
@@ -525,6 +535,88 @@ export const StandaloneSelect = ({
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+/**
+ * Standalone Stepper Component (Direct state controlled)
+ * Clean pill-shaped control: [ − ] | value | [ + ]
+ */
+export const StandaloneStepper = ({
+  value = 2.0,
+  onChange,
+  min = 1.0,
+  max = 5.0,
+  step = 0.5,
+  suffix = "s",
+  prefix,
+  disabled = false,
+  className = "",
+}) => {
+  const numValue = Number(value) || 0;
+  const isAtMin = numValue <= min;
+  const isAtMax = numValue >= max;
+
+  const clamp = (val) => Math.min(max, Math.max(min, val));
+
+  const handleDecrement = () => {
+    if (disabled || isAtMin) return;
+    const nextVal = +(clamp(numValue - step)).toFixed(1);
+    onChange(nextVal);
+  };
+
+  const handleIncrement = () => {
+    if (disabled || isAtMax) return;
+    const nextVal = +(clamp(numValue + step)).toFixed(1);
+    onChange(nextVal);
+  };
+
+  return (
+    <div
+      className={`inline-flex items-stretch bg-slate-900/90 border border-slate-800 rounded-xl overflow-hidden transition-all duration-200 h-9 select-none hover:border-slate-700 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 ${
+        disabled ? "opacity-50 cursor-not-allowed" : ""
+      } ${className}`}
+    >
+      <button
+        type="button"
+        onClick={handleDecrement}
+        disabled={disabled || isAtMin}
+        aria-label="Decrease value"
+        className={`flex items-center justify-center w-8 shrink-0 transition-all duration-150 active:scale-90 ${
+          isAtMin || disabled
+            ? "text-slate-600 cursor-not-allowed"
+            : "text-slate-400 hover:text-white hover:bg-slate-800/70 cursor-pointer"
+        }`}
+      >
+        <Minus className="w-3.5 h-3.5" />
+      </button>
+
+      <div className="w-px bg-slate-800 shrink-0" />
+
+      <div className="px-2.5 flex items-center justify-center gap-1 min-w-[54px] bg-slate-950/40">
+        {prefix && <span className="text-slate-400 text-xs font-mono">{prefix}</span>}
+        <span className="text-xs font-mono font-semibold text-indigo-300">
+          {numValue.toFixed(1)}
+        </span>
+        {suffix && <span className="text-slate-400 text-xs font-mono">{suffix}</span>}
+      </div>
+
+      <div className="w-px bg-slate-800 shrink-0" />
+
+      <button
+        type="button"
+        onClick={handleIncrement}
+        disabled={disabled || isAtMax}
+        aria-label="Increase value"
+        className={`flex items-center justify-center w-8 shrink-0 transition-all duration-150 active:scale-90 ${
+          isAtMax || disabled
+            ? "text-slate-600 cursor-not-allowed"
+            : "text-slate-400 hover:text-white hover:bg-slate-800/70 cursor-pointer"
+        }`}
+      >
+        <Plus className="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 };
@@ -592,12 +684,15 @@ export const PhoneInputField = ({
   autoComplete = "tel-national",
   disabled = false,
   helperText,
+  defaultCountryCode = "+91",
+  defaultValue = "",
 }) => {
   const {
     register,
     watch,
     setValue,
     trigger,
+    getValues,
     formState: { errors },
   } = useFormContext();
 
@@ -605,15 +700,30 @@ export const PhoneInputField = ({
   const [search, setSearch] = useState("");
   const dropdownRef = useRef(null);
 
-  const selectedCode = watch(countryCodeName) || "+91";
-  const phoneError = errors[phoneName];
-
-  // Set default to +91 if not yet set
+  // Initialize defaults if not already present in form state
   useEffect(() => {
-    if (!watch(countryCodeName)) {
-      setValue(countryCodeName, "+91");
+    // If defaultValue is provided like "+919876543210", intelligently split code and digits
+    let initialCode = defaultCountryCode || "+91";
+    let initialPhone = defaultValue ? String(defaultValue).trim() : "";
+
+    if (initialPhone.startsWith("+")) {
+      const match = COUNTRY_CODES.find((c) => initialPhone.startsWith(c.code));
+      if (match) {
+        initialCode = match.code;
+        initialPhone = initialPhone.slice(match.code.length).trim();
+      }
     }
-  }, [countryCodeName, setValue, watch]);
+
+    if (!getValues(countryCodeName)) {
+      setValue(countryCodeName, initialCode);
+    }
+    if (initialPhone && !getValues(phoneName)) {
+      setValue(phoneName, initialPhone);
+    }
+  }, [countryCodeName, phoneName, defaultCountryCode, defaultValue, setValue, getValues]);
+
+  const selectedCode = watch(countryCodeName) || defaultCountryCode || "+91";
+  const phoneError = errors[phoneName];
 
   // Find currently selected country item
   const activeCountry =
@@ -647,29 +757,40 @@ export const PhoneInputField = ({
 
   const getPhoneValidationRules = () => {
     return {
-      required: "Phone number is required",
-      validate: (value) => {
-        if (!value) return "Phone number is required";
-        const digitsOnly = value.replace(/\D/g, "");
-        if (digitsOnly.length !== value.length) {
-          return "Only numbers are allowed";
-        }
-
-        const min = activeCountry?.minLength || 7;
-        const max = activeCountry?.maxLength || 15;
-
-        if (min === max) {
-          if (digitsOnly.length !== min) {
-            return `${activeCountry.country} phone number must be exactly ${min} digits`;
-          }
-        } else {
-          if (digitsOnly.length < min || digitsOnly.length > max) {
-            return `${activeCountry.country} phone number must be between ${min} and ${max} digits`;
-          }
-        }
-        return true;
+      required: {
+        value: true,
+        message: "Phone number is required",
       },
       ...rules,
+      validate: {
+        digitsOnly: (value) => {
+          if (!value) return true;
+          const digits = String(value).replace(/\D/g, "");
+          if (digits.length !== String(value).length) {
+            return "Only numbers are allowed";
+          }
+          return true;
+        },
+        exactLength: (value) => {
+          if (!value) return true;
+          const digits = String(value).replace(/\D/g, "");
+          const min = activeCountry?.minLength || 10;
+          const max = activeCountry?.maxLength || 10;
+
+          if (min === max && digits.length !== min) {
+            return `${activeCountry.country || "Phone"} number must be exactly ${min} digits`;
+          }
+          if (digits.length < min || digits.length > max) {
+            return `${activeCountry.country || "Phone"} number must be between ${min} and ${max} digits`;
+          }
+          return true;
+        },
+        ...(typeof rules?.validate === "function"
+          ? { custom: rules.validate }
+          : typeof rules?.validate === "object"
+          ? rules.validate
+          : {}),
+      },
     };
   };
 
@@ -694,11 +815,15 @@ export const PhoneInputField = ({
             aria-expanded={isOpen}
             disabled={disabled}
             onClick={() => setIsOpen((prev) => !prev)}
-            className="w-full h-full px-2.5 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-slate-200 text-sm flex items-center justify-between hover:border-slate-700 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`w-full h-full px-2.5 py-2.5 border rounded-xl text-sm flex items-center justify-between transition-all duration-200 ${
+              disabled
+                ? "bg-slate-900/90 border-slate-800 text-slate-100 cursor-default shadow-inner"
+                : "bg-slate-900/80 border-slate-800 text-slate-200 hover:border-slate-700 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
+            }`}
           >
             <span className="flex items-center gap-1.5 truncate">
               <span className="text-base leading-none">{activeCountry.flag}</span>
-              <span className="font-mono text-xs font-medium text-slate-100">
+              <span className="font-mono text-xs font-semibold text-slate-100">
                 {activeCountry.code}
               </span>
             </span>
@@ -758,18 +883,52 @@ export const PhoneInputField = ({
           )}
         </div>
 
-        {/* Telephone Input */}
+        {/* Clean, Visible Phone Number Input (type="tel") */}
         <input
           id={phoneName}
           type="tel"
+          inputMode="numeric"
+          pattern="[0-9]*"
           autoComplete={autoComplete}
           disabled={disabled}
           placeholder={placeholder}
           {...register(phoneName, getPhoneValidationRules())}
-          className={`w-full px-3.5 py-2.5 bg-slate-900/80 border rounded-xl text-slate-100 text-sm placeholder:text-slate-500 transition-all duration-200 outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed ${
-            phoneError
-              ? "border-rose-500 focus:border-rose-500 focus:ring-rose-500/20"
-              : "border-slate-800 focus:border-indigo-500 focus:ring-indigo-500/20 hover:border-slate-700"
+          onKeyDown={(e) => {
+            // Allow navigation and edit controls
+            const allowedKeys = [
+              "Backspace",
+              "Tab",
+              "Enter",
+              "Delete",
+              "ArrowLeft",
+              "ArrowRight",
+              "ArrowUp",
+              "ArrowDown",
+              "Home",
+              "End",
+            ];
+            if (
+              allowedKeys.includes(e.key) ||
+              (e.ctrlKey === true || e.metaKey === true)
+            ) {
+              return;
+            }
+            // Block non-digit keys
+            if (!/^[0-9]$/.test(e.key)) {
+              e.preventDefault();
+            }
+          }}
+          onChange={(e) => {
+            // Strip any non-numeric characters (e.g. from copy-paste)
+            const cleanDigits = e.target.value.replace(/\D/g, "");
+            setValue(phoneName, cleanDigits, { shouldValidate: true, shouldDirty: true });
+          }}
+          className={`w-full px-3.5 py-2.5 border rounded-xl text-sm placeholder:text-slate-500 transition-all duration-200 outline-none ${
+            disabled
+              ? "bg-slate-900/90 border-slate-800 text-slate-100 font-medium cursor-default shadow-inner select-all"
+              : phoneError
+              ? "bg-slate-900/80 text-slate-100 border-rose-500 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
+              : "bg-slate-900/80 text-slate-100 border-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 hover:border-slate-700"
           }`}
         />
       </div>
@@ -780,6 +939,207 @@ export const PhoneInputField = ({
         </span>
       )}
       {helperText && !phoneError && (
+        <span className="text-xs text-slate-400">{helperText}</span>
+      )}
+    </div>
+  );
+};
+
+/**
+ * Universal Drag-and-Drop File Upload Field
+ * Supports:
+ * - Specific file restrictions (accept=".csv,.xlsx")
+ * - Drag and drop states
+ * - Custom callback onFileSelect(file)
+ * - File removal / clearing
+ */
+export const FileUploadField = ({
+  name = "file",
+  label = "Upload File",
+  accept = ".csv,.xlsx",
+  maxSizeMB = 10,
+  rules = {},
+  onFileSelect,
+  disabled = false,
+  helperText,
+}) => {
+  const formContext = useFormContext();
+  const register = formContext?.register;
+  const setValue = formContext?.setValue;
+  const formErrors = formContext?.formState?.errors;
+
+  const [dragActive, setDragActive] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [internalError, setInternalError] = useState("");
+  const inputRef = useRef(null);
+
+  const fieldError = formErrors && formErrors[name];
+  const activeError = fieldError?.message || internalError;
+  const isRequired = rules?.required?.value ?? Boolean(rules?.required);
+
+  const validateAndProcessFile = (file) => {
+    setInternalError("");
+    if (!file) return;
+
+    if (file.size > maxSizeMB * 1024 * 1024) {
+      setInternalError(`File size exceeds maximum limit of ${maxSizeMB}MB`);
+      return;
+    }
+
+    if (accept) {
+      const allowedExts = accept
+        .split(",")
+        .map((ext) => ext.trim().toLowerCase());
+      const fileExt = `.${file.name.split(".").pop().toLowerCase()}`;
+      if (!allowedExts.includes(fileExt)) {
+        setInternalError(`Invalid file type. Allowed formats: ${accept}`);
+        return;
+      }
+    }
+
+    setSelectedFile(file);
+    if (setValue) {
+      setValue(name, file, { shouldValidate: true, shouldDirty: true });
+    }
+    if (typeof onFileSelect === "function") {
+      onFileSelect(file);
+    }
+  };
+
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (disabled) return;
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (disabled) return;
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      validateAndProcessFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      validateAndProcessFile(e.target.files[0]);
+    }
+  };
+
+  const handleClear = (e) => {
+    e.stopPropagation();
+    setSelectedFile(null);
+    setInternalError("");
+    if (setValue) {
+      setValue(name, null, { shouldValidate: true, shouldDirty: true });
+    }
+    if (inputRef.current) inputRef.current.value = "";
+    if (typeof onFileSelect === "function") {
+      onFileSelect(null);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5 w-full">
+      {label && (
+        <label className="text-sm font-medium text-slate-200 flex items-center gap-1">
+          {label}
+          {isRequired && <span className="text-rose-400 font-bold">*</span>}
+        </label>
+      )}
+
+      {/* Hidden input to register with react-hook-form */}
+      {register && <input type="hidden" {...register(name, rules)} />}
+
+      <div
+        onDragEnter={handleDrag}
+        onDragLeave={handleDrag}
+        onDragOver={handleDrag}
+        onDrop={handleDrop}
+        onClick={() => !disabled && inputRef.current?.click()}
+        className={`relative border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-200 ${
+          disabled
+            ? "border-slate-800/60 bg-slate-900/30 opacity-50 cursor-not-allowed"
+            : dragActive
+            ? "border-indigo-500 bg-indigo-500/10 scale-[1.008]"
+            : activeError
+            ? "border-rose-500/80 bg-rose-500/5 hover:border-rose-500"
+            : selectedFile
+            ? "border-emerald-500/60 bg-emerald-500/5 hover:border-emerald-500"
+            : "border-slate-800 bg-slate-900/50 hover:border-slate-700 hover:bg-slate-900/80"
+        }`}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept={accept}
+          disabled={disabled}
+          onChange={handleChange}
+          className="hidden"
+        />
+
+        {selectedFile ? (
+          <div className="flex items-center justify-between w-full max-w-md bg-slate-900/90 border border-slate-700/80 rounded-xl p-3 shadow-lg">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-lg shrink-0">
+                <FileSpreadsheet className="w-5 h-5" />
+              </div>
+              <div className="text-left min-w-0">
+                <p className="text-xs font-semibold text-slate-100 truncate">
+                  {selectedFile.name}
+                </p>
+                <p className="text-[11px] text-slate-400 font-mono">
+                  {(selectedFile.size / 1024).toFixed(1)} KB
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleClear}
+              className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors ml-2"
+              title="Remove file"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2 select-none">
+            <div
+              className={`p-3 rounded-2xl transition-colors ${
+                dragActive
+                  ? "bg-indigo-600 text-white"
+                  : "bg-slate-800/80 text-slate-400"
+              }`}
+            >
+              <Upload className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-200">
+                Click to upload or drag & drop
+              </p>
+              <p className="text-xs text-slate-500 mt-0.5 font-mono">
+                Supports {accept || "all files"} (Max {maxSizeMB}MB)
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {activeError && (
+        <span className="text-xs text-rose-400 font-medium flex items-center gap-1">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          {activeError}
+        </span>
+      )}
+      {helperText && !activeError && (
         <span className="text-xs text-slate-400">{helperText}</span>
       )}
     </div>

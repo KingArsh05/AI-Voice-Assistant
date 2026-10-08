@@ -40,7 +40,6 @@ class Config:
     DEBUG: bool = get_env_bool("FLASK_DEBUG", default=True)
     PORT: int = get_env_int("PORT", default=8000)
 
-
     # MongoDB Configuration (Required)
     MONGO_URI: str = get_required_env("MONGO_URI")
     MONGODB_DB_NAME: str = get_required_env("MONGODB_DB_NAME")
@@ -53,16 +52,13 @@ class Config:
     PLIVO_OUTBOUND_API_URL: str = get_required_env("PLIVO_OUTBOUND_API_URL")
 
     # Service & WebSocket Endpoints (Optional with fallback to None)
-    SERVER_URL: Optional[str] = os.getenv("SERVER_URL")
-    WS_URL: Optional[str] = os.getenv("WS_URL")
+    SERVER_URL: str = get_required_env("SERVER_URL")
+    WS_URL: str = get_required_env("WS_URL")
 
     # Combot CRM Integration
-    COMBOT_BASE_URL: str = os.getenv(
-        "COMBOT_BASE_URL",
-        "https://combot-crm-v2dot1-316221817495.asia-south1.run.app",
-    )
-    COMBOT_SECRET_KEY: str = os.getenv(
-        "COMBOT_SECRET_KEY",
-        "django-insecure-staychat_super_secret_key",
-    )
+    COMBOT_BASE_URL: str = get_required_env("COMBOT_BASE_URL")
+    COMBOT_SECRET_KEY: str = get_required_env("COMBOT_SECRET_KEY")
+    GROQ_API_KEY: str = get_required_env("GROQ_API_KEY")
 
+    # Knowledge Base Cache TTL in hours (defaults to 3 hours)
+    HOTEL_KB_CACHE_TTL_HOURS: int = get_env_int("HOTEL_KB_CACHE_TTL_HOURS", default=3)

@@ -1,37 +1,19 @@
 import { NavLink } from "react-router-dom";
-import { PhoneCall, ListFilter, Bot, Activity, Building2, ListOrdered, Users } from "lucide-react";
+import { PhoneCall, PhoneForwarded, Bot, Activity } from "lucide-react";
 
 export default function Sidebar() {
   const navItems = [
     {
-      name: "CRM Leads",
-      path: "/staychat-crm",
-      icon: Users,
-      badge: "Database",
-    },
-    {
-      name: "Make Call",
-      path: "/make-call",
+      name: "Make Single Call",
+      path: "/make-single-call",
       icon: PhoneCall,
-      badge: "AI Agent",
+      badge: "Agent",
     },
     {
-      name: "Bulk Calls",
-      path: "/bulk-calls",
-      icon: ListOrdered,
+      name: "Make Bulk Calls",
+      path: "/make-bulk-calls",
+      icon: PhoneForwarded,
       badge: "Queue",
-    },
-    {
-      name: "Call Logs",
-      path: "/call-logs",
-      icon: ListFilter,
-      badge: "Realtime",
-    },
-    {
-      name: "Hotels",
-      path: "/hotels",
-      icon: Building2,
-      badge: "Config",
     },
   ];
 
@@ -47,7 +29,9 @@ export default function Sidebar() {
             StayChat
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           </h2>
-          <p className="text-[11px] text-slate-400 font-medium">Voice Assistant Portal</p>
+          <p className="text-[11px] text-slate-400 font-medium">
+            Voice Assistant Portal
+          </p>
         </div>
       </div>
 

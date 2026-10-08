@@ -1,6 +1,5 @@
-import React from "react";
 import { useLocation } from "react-router-dom";
-import { Sparkles, Radio, ShieldCheck } from "lucide-react";
+import { Sparkles, Radio } from "lucide-react";
 
 export default function Header() {
   const location = useLocation();

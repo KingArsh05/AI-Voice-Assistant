@@ -32,6 +32,7 @@ class MongoDB:
             print(f"  Response   : {elapsed_ms:.2f} ms")
             print("=" * 55 + "\n")
 
+            self.ensure_indexes()
             return True
 
         except ServerSelectionTimeoutError as error:
@@ -46,6 +47,33 @@ class MongoDB:
             print("=" * 55 + "\n")
 
             return False
+
+    def ensure_indexes(self) -> None:
+        """Create required indexes for hotel_knowledge_bases and voice_call_logs per system plan."""
+        try:
+            # Collection 1: hotel_knowledge_bases
+            self.voice_calling_app_db["hotel_knowledge_bases"].create_index(
+                [("hotel_id", 1)], unique=True, background=True
+            )
+            self.voice_calling_app_db["hotel_knowledge_bases"].create_index(
+                [("hotel_id", 1), ("updated_at", -1)], background=True
+            )
+
+            # Collection 2: voice_call_logs
+            self.voice_calling_app_db["voice_call_logs"].create_index(
+                [("identifiers.trigger_id", 1)], background=True
+            )
+            self.voice_calling_app_db["voice_call_logs"].create_index(
+                [("identifiers.call_uuid", 1)], background=True
+            )
+            self.voice_calling_app_db["voice_call_logs"].create_index(
+                [("party_details.hotel_id", 1), ("created_at", -1)], background=True
+            )
+            self.voice_calling_app_db["voice_call_logs"].create_index(
+                [("trigger_id", 1)], background=True
+            )
+        except Exception as e:
+            print(f"Warning: Failed to ensure database indexes: {e}")
 
     def close(self) -> None:
         self.client.close()
