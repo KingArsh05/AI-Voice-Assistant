@@ -175,3 +175,20 @@ def stream_recording(recording_id: str):
     except Exception as e:
         logger.exception("Error streaming recording: %s", e)
         return jsonify({"error": "Failed to stream audio"}), 500
+
+@voice_bp.route("/crm",methods=["GET"])
+def get_crm_data():
+    try:
+        limit = int(request.args.get("limit", 50))
+        skip = int(request.args.get("skip", 0))
+        primary_intent = request.args.get("primary_intent")
+        hotel_id = request.args.get("hotel_id")
+
+        result = plivo_service.get_crm_data(
+            limit=limit, skip=skip, primary_intent=primary_intent, hotel_id=hotel_id
+        )
+        return jsonify({"success": True, "data": result}), 200
+    except Exception as e:
+        logger.exception("Error fetching crm data: %s", e)
+        return jsonify({"success": False, "message": str(e)}), 500
+    

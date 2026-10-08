@@ -12,9 +12,14 @@ class MongoDB:
             Config.MONGO_URI,
             serverSelectionTimeoutMS=5000,
         )
+        self.crm_client = MongoClient(
+            Config.MONGODB_CRM_URL,
+            serverSelectionTimeoutMS=5000,
+        )
 
         self.voice_calling_app_db = self.client[Config.MONGODB_DB_NAME]
         self.staychat_clone_db = self.client[Config.MONGODB_SOURCE_DB_NAME]
+        self.crm_db = self.crm_client[Config.MONGODB_CRM_DB_NAME]
 
     def connect(self) -> bool:
         start_time = time.perf_counter()

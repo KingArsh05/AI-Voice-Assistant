@@ -99,3 +99,13 @@ class PlivoVoiceService:
 
     def get_call_by_id(self, call_identifier: str) -> Optional[dict]:
         return self.query_service.get_call_by_id(call_identifier)
+
+    # --- CRM Delegation ---
+    def get_crm_data(self,
+        limit: int = 50,
+        skip: int = 0,
+        primary_intent: Optional[str] = None,
+        hotel_id: Optional[str] = None,)-> dict:
+        return self.query_service.get_crm_data(
+            limit=limit, skip=skip, primary_intent=primary_intent, hotel_id=hotel_id
+        )

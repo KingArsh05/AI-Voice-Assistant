@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo } from "react";
 import axios from "axios";
 import {
   PhoneCall,
@@ -52,36 +52,67 @@ export default function CallLogs() {
     { value: "50", label: "50 rows" },
   ];
 
-  // Fetch Calls wrapped in useCallback
-  const fetchCalls = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const skip = (page - 1) * limit;
-      let url = `${BASE_URL}/api/v1/voice/calls?limit=${limit}&skip=${skip}`;
-      if (statusFilter && statusFilter !== "all") {
-        url += `&status=${statusFilter}`;
-      }
+  // Fetch Calls on filter/pagination changes
+  useEffect(() => {
+    let ignore = false;
 
-      const res = await axios.get(url);
-      if (res.data?.success && res.data?.data) {
-        setCalls(res.data.data.calls || []);
-        setTotal(res.data.data.total || 0);
-      } else {
-        setCalls([]);
-        setTotal(0);
-      }
-    } catch (err) {
-      console.error("Failed to fetch call logs:", err);
-      setError("Unable to load calls from server.");
-    } finally {
-      setIsLoading(false);
+    const skip = (page - 1) * limit;
+    let url = `${BASE_URL}/api/v1/voice/calls?limit=${limit}&skip=${skip}`;
+    if (statusFilter && statusFilter !== "all") {
+      url += `&status=${statusFilter}`;
     }
+
+    axios
+      .get(url)
+      .then((res) => {
+        if (!ignore) {
+          if (res.data?.success && res.data?.data) {
+            setCalls(res.data.data.calls || []);
+            setTotal(res.data.data.total || 0);
+          } else {
+            setCalls([]);
+            setTotal(0);
+          }
+          setError(null);
+          setIsLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!ignore) {
+          console.error("Failed to fetch call logs:", err);
+          setError("Unable to load calls from server.");
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
   }, [BASE_URL, page, limit, statusFilter]);
 
-  useEffect(() => {
-    fetchCalls();
-  }, [fetchCalls]);
+  const fetchCalls = () => {
+    setIsLoading(true);
+    setError(null);
+    const skip = (page - 1) * limit;
+    let url = `${BASE_URL}/api/v1/voice/calls?limit=${limit}&skip=${skip}`;
+    if (statusFilter && statusFilter !== "all") {
+      url += `&status=${statusFilter}`;
+    }
+    axios
+      .get(url)
+      .then((res) => {
+        if (res.data?.success && res.data?.data) {
+          setCalls(res.data.data.calls || []);
+          setTotal(res.data.data.total || 0);
+        }
+        setIsLoading(false);
+      })
+      .catch((err) => {
+        console.error("Refresh failed:", err);
+        setError("Unable to load calls from server.");
+        setIsLoading(false);
+      });
+  };
 
   // Client-side quick filter
   const filteredCalls = useMemo(() => {

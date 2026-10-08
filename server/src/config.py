@@ -42,8 +42,11 @@ class Config:
 
     # MongoDB Configuration (Required)
     MONGO_URI: str = get_required_env("MONGO_URI")
+    MONGODB_CRM_URL:str = get_required_env("MONGODB_CRM_URL")
+
     MONGODB_DB_NAME: str = get_required_env("MONGODB_DB_NAME")
     MONGODB_SOURCE_DB_NAME: str = get_required_env("MONGODB_SOURCE_DB_NAME")
+    MONGODB_CRM_DB_NAME: str = get_required_env("MONGODB_CRM_DB_NAME")
 
     # Plivo Telephony Configuration (Required for voice services)
     PLIVO_AUTH_ID: str = get_required_env("PLIVO_AUTH_ID")

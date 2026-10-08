@@ -2,6 +2,7 @@ import logging
 from datetime import datetime
 from typing import Optional, Dict, Any
 from src.db.connection import mongodb
+from bson.json_util import dumps
 
 logger = logging.getLogger(__name__)
 
@@ -9,6 +10,7 @@ logger = logging.getLogger(__name__)
 class CallQueryService:
     def __init__(self):
         self.db = mongodb.voice_calling_app_db
+        self.crm_db = mongodb.crm_db
 
     def get_calls(
         self,
@@ -89,3 +91,52 @@ class CallQueryService:
             call["updated_at"] = call["updated_at"].isoformat()
 
         return call
+
+    def get_crm_data(
+        self,
+        limit: int = 50,
+        skip: int = 0,
+        primary_intent: Optional[str] = None,
+        hotel_id: Optional[str] = None,
+    ) -> dict:
+        """
+        Retrieves paginated CRM records sorted by newest first.
+        Only filters by fields that were actually provided.
+        """
+        query: Dict[str, Any] = {}
+        if hotel_id:
+            query["hotelID"] = hotel_id
+        if primary_intent:
+            query["primary_intent"] = primary_intent
+
+        projection = {
+            "_id": 1,  # default is 1, set 0 if you don't want it
+            "hotelID": 1,
+            "phone_number": 1,
+            "primary_intent": 1,
+            "summary": 1,
+            "last_updated": 1,
+        }
+
+        total_count = self.crm_db["chat_summary"].count_documents(query)
+        cursor = (
+            self.crm_db["chat_summary"].find(query, projection).skip(skip).limit(limit)
+        )
+
+        crm_data = []
+        for doc in cursor:
+            doc["_id"] = str(doc["_id"])
+            doc["hotel_id"] = doc.pop("hotelID", None)
+            doc.setdefault("guest_name", "Guest")
+
+            for key, val in doc.items():
+                if isinstance(val, datetime):
+                    doc[key] = val.isoformat()
+            crm_data.append(doc)
+
+        return {
+            "total": total_count,
+            "limit": limit,
+            "skip": skip,
+            "crm_data": crm_data,
+        }

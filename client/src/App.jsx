@@ -7,6 +7,7 @@ import Header from "./components/Header";
 import MakeSingleCall from "./components/MakeSingleCall";
 import MakeBulkCalls from "./components/MakeBulkCalls";
 import CallLogs from "./components/call_logs/CallLogs";
+import CRMData from "./components/crm_data/CRMData";
 
 export default function App() {
   return (
@@ -40,6 +41,8 @@ export default function App() {
               <Route path="/make-single-call" element={<MakeSingleCall />} />
               <Route path="/make-bulk-calls" element={<MakeBulkCalls />} />
               <Route path="/call-logs" element={<CallLogs />} />
+              <Route path="/crm-data" element={<CRMData />} />
+
             </Routes>
           </main>
         </div>
