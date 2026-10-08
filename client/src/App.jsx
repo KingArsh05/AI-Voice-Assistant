@@ -6,6 +6,7 @@ import Header from "./components/Header";
 
 import MakeSingleCall from "./components/MakeSingleCall";
 import MakeBulkCalls from "./components/MakeBulkCalls";
+import CallLogs from "./components/call_logs/CallLogs";
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
               />
               <Route path="/make-single-call" element={<MakeSingleCall />} />
               <Route path="/make-bulk-calls" element={<MakeBulkCalls />} />
+              <Route path="/call-logs" element={<CallLogs />} />
             </Routes>
           </main>
         </div>

@@ -102,7 +102,7 @@ export default function MakeBulkCalls() {
           selectedHotelId ||
           (hotels[0]?.hotel_id ? String(hotels[0].hotel_id) : "111111"),
         rate_limit_second: Number(rateLimitSecond),
-        dry_run: true,
+        dry_run: false,
         contacts: parsedContacts,
       };
 

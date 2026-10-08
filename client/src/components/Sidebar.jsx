@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { PhoneCall, PhoneForwarded, Bot, Activity } from "lucide-react";
+import { PhoneCall, PhoneForwarded, Bot, Activity, PhoneCallIcon } from "lucide-react";
 
 export default function Sidebar() {
   const navItems = [
@@ -14,6 +14,12 @@ export default function Sidebar() {
       path: "/make-bulk-calls",
       icon: PhoneForwarded,
       badge: "Queue",
+    },
+    {
+      name: "Call Logs",
+      path: "/call-logs",
+      icon: PhoneCallIcon,
+      badge: "Logs",
     },
   ];
 
