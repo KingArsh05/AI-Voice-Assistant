@@ -11,7 +11,13 @@ def create_app() -> Flask:
     app = Flask(__name__)
     app.config.from_object(Config)
 
-    CORS(app)
+    CORS(
+        app,
+        resources={r"/*": {"origins": "*"}},
+        supports_credentials=True,
+        allow_headers=["Content-Type", "Authorization"],
+        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    )
 
     if not mongodb.connect():
         raise RuntimeError("MongoDB connection failed")
@@ -31,4 +37,3 @@ def create_app() -> Flask:
     app.register_blueprint(voice_bp, url_prefix="/api/v1/voice")
 
     return app
-

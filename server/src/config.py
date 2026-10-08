@@ -59,8 +59,6 @@ class Config:
     WS_URL: str = get_required_env("WS_URL")
 
     # Combot CRM Integration
-    COMBOT_BASE_URL: str = get_required_env("COMBOT_BASE_URL")
-    COMBOT_SECRET_KEY: str = get_required_env("COMBOT_SECRET_KEY")
     GROQ_API_KEY: str = get_required_env("GROQ_API_KEY")
 
     # Knowledge Base Cache TTL in hours (defaults to 3 hours)

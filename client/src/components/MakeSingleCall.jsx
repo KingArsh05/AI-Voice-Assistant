@@ -40,7 +40,7 @@ export default function MakeSingleCall() {
   const [lastDispatchedCall, setLastDispatchedCall] = useState(null);
 
   const BASE_URL =
-    import.meta.env.VITE_BASE_URL || import.meta.env.VITE_API_URL;
+    import.meta.env.VITE_BASE_URL;
 
   // React 19 Compiler-safe observation via useWatch
   const formValues = useWatch({
