@@ -179,35 +179,39 @@ export default function CRMBulkCallModal({
         if (res.data && res.data.success) {
           const triggerId = res.data?.data?.trigger_id;
 
-          // Brief delay (1.2s) to allow Plivo webhook callback to arrive
-          await new Promise((r) => setTimeout(r, 1200));
-
           let finalStatus = "completed";
           let failReason = null;
 
           if (triggerId) {
-            try {
-              const callCheck = await axios.get(
-                `${BASE_URL}/api/v1/voice/calls/${triggerId}`,
-              );
-              const callData = callCheck.data?.data;
-              const serverStatus = callData?.call_status || callData?.disposition;
-              const hangupCause = callData?.hangup?.cause || "";
+            // Poll for up to 3.5 seconds (intervals of 800ms) to receive Plivo's hangup webhook
+            for (let attempt = 0; attempt < 4; attempt++) {
+              await new Promise((r) => setTimeout(r, 800));
+              try {
+                const callCheck = await axios.get(
+                  `${BASE_URL}/api/v1/voice/calls/${triggerId}`,
+                );
+                const callData = callCheck.data?.data;
+                const serverStatus = (callData?.call_status || callData?.disposition || "").toLowerCase();
+                const hangupCause = (callData?.hangup?.cause || "").toLowerCase();
 
-              if (
-                serverStatus === "failed" ||
-                serverStatus === "rejected" ||
-                serverStatus === "busy" ||
-                serverStatus === "no_answer" ||
-                hangupCause.toLowerCase().includes("credit") ||
-                hangupCause.toLowerCase().includes("failed")
-              ) {
-                finalStatus = "failed";
-                failReason =
-                  hangupCause || serverStatus || "Failed / Out of credits";
+                if (
+                  serverStatus === "failed" ||
+                  serverStatus === "rejected" ||
+                  serverStatus === "busy" ||
+                  serverStatus === "no_answer" ||
+                  hangupCause.includes("credit") ||
+                  hangupCause.includes("failed")
+                ) {
+                  finalStatus = "failed";
+                  failReason = callData?.hangup?.cause || callData?.call_status || "failed_out_of_credits";
+                  break;
+                } else if (serverStatus === "answered" || serverStatus === "completed") {
+                  finalStatus = "completed";
+                  break;
+                }
+              } catch (errCheck) {
+                console.warn("Could not check call status:", errCheck);
               }
-            } catch (errCheck) {
-              console.warn("Could not check call status:", errCheck);
             }
           }
 
