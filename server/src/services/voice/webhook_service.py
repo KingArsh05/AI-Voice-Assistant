@@ -109,7 +109,15 @@ class WebhookService:
 
         query = {"$or": query_or}
 
-        if duration > 0 or "completed" in raw_status:
+        # Check if call failed or was answered
+        if (
+            "failed" in raw_status
+            or "credit" in raw_status
+            or raw_status == "failed_out_of_credits"
+        ):
+            call_status = "failed"
+            disposition = "failed"
+        elif duration > 0 or "completed" in raw_status:
             call_status = "answered"
             disposition = "completed"
         elif "busy" in raw_status:
