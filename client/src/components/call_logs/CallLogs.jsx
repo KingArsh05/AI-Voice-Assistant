@@ -347,7 +347,21 @@ export default function CallLogs() {
                   const guestName = call.party_details?.guest_name || "Guest";
                   const phoneNumber = call.telephony?.to_number || "—";
                   const hotelName = call.party_details?.hotel_name || "Hotel";
-                  const summary = call.ai_insights?.summary || call.party_details?.guest_lead || "No notes logged";
+                  const isFailed =
+                    call.disposition === "failed" ||
+                    call.call_status === "failed" ||
+                    call.call_status === "rejected";
+                  const failureReason =
+                    call.hangup?.cause === "failed_out_of_credits"
+                      ? "Call failed: Insufficient Plivo credits"
+                      : call.hangup?.cause
+                        ? `Call failed: ${call.hangup.cause.replace(/_/g, " ")}`
+                        : "Call failed to connect";
+                  const summary = isFailed
+                    ? failureReason
+                    : call.ai_insights?.summary ||
+                      call.party_details?.guest_lead ||
+                      "No notes logged";
                   const hasRecording = Boolean(call.media?.recording_id);
 
                   return (
@@ -403,8 +417,11 @@ export default function CallLogs() {
                       </td>
 
                       {/* AI Summary */}
-                      <td className="py-3 px-4 max-w-xs truncate text-slate-300 text-[11px]">
-                        <span title={summary} className="line-clamp-1">
+                      <td className="py-3 px-4 max-w-xs truncate text-[11px]">
+                        <span
+                          title={summary}
+                          className={`line-clamp-1 ${isFailed ? "text-rose-400/90 font-medium" : "text-slate-300"}`}
+                        >
                           {summary}
                         </span>
                       </td>

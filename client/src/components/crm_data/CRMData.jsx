@@ -166,6 +166,7 @@ export default function CRMData() {
   const filteredLeads = useMemo(() => {
     if (!searchQuery.trim()) return leads;
     const q = searchQuery.toLowerCase();
+    console.log({ leads });
     return leads.filter((l) => {
       const name = (l.guest_name || "").toLowerCase();
       const phone = (l.phone_number || "").toLowerCase();
@@ -213,7 +214,8 @@ export default function CRMData() {
               CRM Inquiries & Leads
             </h1>
             <p className="text-xs text-slate-400 mt-1">
-              Qualified guest leads extracted automatically from conversations for outbound calling and conversion.
+              Qualified guest leads extracted automatically from conversations
+              for outbound calling and conversion.
             </p>
           </div>
 
@@ -223,7 +225,9 @@ export default function CRMData() {
             disabled={isLoading}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 text-xs transition-all cursor-pointer shadow-sm active:scale-95"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-indigo-400" : ""}`} />
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-indigo-400" : ""}`}
+            />
             <span>Refresh</span>
           </button>
         </div>
@@ -235,8 +239,12 @@ export default function CRMData() {
               <Users className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[11px] text-slate-400 block">Total CRM Leads</span>
-              <span className="text-base font-bold text-white font-mono">{total}</span>
+              <span className="text-[11px] text-slate-400 block">
+                Total CRM Leads
+              </span>
+              <span className="text-base font-bold text-white font-mono">
+                {total}
+              </span>
             </div>
           </div>
 
@@ -245,7 +253,9 @@ export default function CRMData() {
               <Building2 className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[11px] text-slate-400 block">Connected Hotels</span>
+              <span className="text-[11px] text-slate-400 block">
+                Connected Hotels
+              </span>
               <span className="text-base font-bold text-violet-300 font-mono">
                 {hotels.length || "1"} Properties
               </span>
@@ -257,8 +267,12 @@ export default function CRMData() {
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[11px] text-slate-400 block">Ready to Call</span>
-              <span className="text-base font-bold text-emerald-400 font-mono">100% Verified</span>
+              <span className="text-[11px] text-slate-400 block">
+                Ready to Call
+              </span>
+              <span className="text-base font-bold text-emerald-400 font-mono">
+                100% Verified
+              </span>
             </div>
           </div>
         </div>
@@ -321,7 +335,9 @@ export default function CRMData() {
 
         {/* Counter */}
         <div className="text-xs text-slate-400 font-mono">
-          Showing <span className="text-white font-bold">{filteredLeads.length}</span> of {total} leads
+          Showing{" "}
+          <span className="text-white font-bold">{filteredLeads.length}</span>{" "}
+          of {total} leads
         </div>
       </div>
 
@@ -332,12 +348,24 @@ export default function CRMData() {
             <thead className="bg-slate-950/70 text-slate-400 uppercase text-[10px] tracking-wider sticky top-0 z-10 border-b border-slate-800/90 backdrop-blur-md">
               <tr>
                 {/* Fixed column ratios: wider Lead Context / Summary (38%) */}
-                <th className="w-[18%] py-3 px-4 text-center font-semibold">Guest Contact</th>
-                <th className="w-[10%] py-3 px-3 text-center font-semibold">Hotel ID</th>
-                <th className="w-[13%] py-3 px-3 text-center font-semibold">Primary Intent</th>
-                <th className="w-[37%] py-3 px-4 text-center font-semibold">Lead Context / Summary</th>
-                <th className="w-[12%] py-3 px-3 text-center font-semibold">Last Updated</th>
-                <th className="w-[10%] py-3 px-4 text-center font-semibold">Action</th>
+                <th className="w-[18%] py-3 px-4 text-center font-semibold">
+                  Guest Contact
+                </th>
+                <th className="w-[10%] py-3 px-3 text-center font-semibold">
+                  Hotel ID
+                </th>
+                <th className="w-[13%] py-3 px-3 text-center font-semibold">
+                  Primary Intent
+                </th>
+                <th className="w-[37%] py-3 px-4 text-center font-semibold">
+                  Lead Context / Summary
+                </th>
+                <th className="w-[12%] py-3 px-3 text-center font-semibold">
+                  Last Updated
+                </th>
+                <th className="w-[10%] py-3 px-4 text-center font-semibold">
+                  Action
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-sans">
@@ -372,79 +400,89 @@ export default function CRMData() {
                   </td>
                 </tr>
               ) : (
-                filteredLeads.map((lead) => {
-                  const guestName = lead.guest_name || "Guest";
-                  const phoneNumber = lead.phone_number || "—";
-                  const summary = lead.summary || "No inquiry notes logged.";
+                filteredLeads
+                  .sort(
+                    (a, b) =>
+                      new Date(b.last_updated) - new Date(a.last_updated),
+                  )
+                  .map((lead) => {
+                    const guestName = lead.guest_name || "Guest";
+                    const phoneNumber = lead.phone_number
+                      ? `+${lead.phone_number.slice(0, 2)} ${lead.phone_number.slice(2)}`
+                      : "—";
+                    const summary = lead.summary || "No inquiry notes logged.";
 
-                  return (
-                    <tr
-                      key={lead._id}
-                      onClick={() => setSelectedLead(lead)}
-                      className="hover:bg-slate-800/40 transition-colors cursor-pointer group"
-                    >
-                      {/* Guest Contact - Left Aligned */}
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-8 h-8 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/20 flex items-center justify-center font-bold text-xs shrink-0">
-                            {guestName[0]?.toUpperCase()}
+                    return (
+                      <tr
+                        key={lead._id}
+                        onClick={() => setSelectedLead(lead)}
+                        className="hover:bg-slate-800/40 transition-colors cursor-pointer group"
+                      >
+                        {/* Guest Contact - Left Aligned */}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/20 flex items-center justify-center font-bold text-xs shrink-0">
+                              {guestName[0]?.toUpperCase()}
+                            </div>
+                            <div className="min-w-0 truncate">
+                              <span className="font-semibold text-white block group-hover:text-indigo-300 transition-colors truncate">
+                                {guestName}
+                              </span>
+                              <span className="text-[11px] text-slate-400 font-mono block truncate">
+                                {phoneNumber}
+                              </span>
+                            </div>
                           </div>
-                          <div className="min-w-0 truncate">
-                            <span className="font-semibold text-white block group-hover:text-indigo-300 transition-colors truncate">
-                              {guestName}
-                            </span>
-                            <span className="text-[11px] text-slate-400 font-mono block truncate">
-                              {phoneNumber}
-                            </span>
+                        </td>
+
+                        {/* Hotel - Centered */}
+                        <td className="py-3 px-3 text-center whitespace-nowrap">
+                          <span className="inline-flex items-center justify-center gap-1.5 text-slate-300 font-mono">
+                            <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>{lead.hotel_id || "—"}</span>
+                          </span>
+                        </td>
+
+                        {/* Primary Intent - Centered */}
+                        <td className="py-3 px-3 text-center whitespace-nowrap">
+                          <div className="flex justify-center">
+                            <CRMIntentBadge intent={lead.primary_intent} />
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* Hotel - Centered */}
-                      <td className="py-3 px-3 text-center whitespace-nowrap">
-                        <span className="inline-flex items-center justify-center gap-1.5 text-slate-300 font-mono">
-                          <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span>{lead.hotel_id || "—"}</span>
-                        </span>
-                      </td>
-
-                      {/* Primary Intent - Centered */}
-                      <td className="py-3 px-3 text-center whitespace-nowrap">
-                        <div className="flex justify-center">
-                          <CRMIntentBadge intent={lead.primary_intent} />
-                        </div>
-                      </td>
-
-                      {/* Lead Summary - Left-aligned text with wider reading width */}
-                      <td className="py-3 px-4 text-left text-slate-300 text-[11px]">
-                        <span title={summary} className="line-clamp-2 mx-auto block max-w-xl leading-relaxed">
-                          {summary}
-                        </span>
-                      </td>
-
-                      {/* Last Updated - Centered */}
-                      <td className="py-3 px-3 text-center whitespace-nowrap text-slate-400 text-[11px]">
-                        {formatDate(lead.last_updated)}
-                      </td>
-
-                      {/* Action - Centered */}
-                      <td className="py-3 px-4 text-center">
-                        <div className="inline-flex items-center justify-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={(e) => handleQuickCall(e, lead)}
-                            className="px-2.5 py-1 rounded-lg bg-indigo-600/15 hover:bg-indigo-600/25 border border-indigo-500/30 text-indigo-300 font-medium text-[11px] flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-xs"
-                            title="Direct Outbound Call"
+                        {/* Lead Summary - Left-aligned text with wider reading width */}
+                        <td className="py-3 px-4 text-left text-slate-300 text-[11px]">
+                          <span
+                            title={summary}
+                            className="line-clamp-2 mx-auto block max-w-xl leading-relaxed"
                           >
-                            <PhoneForwarded className="w-3 h-3 text-indigo-400" />
-                            <span>Call</span>
-                          </button>
-                          <ChevronRightIcon className="w-4 h-4 text-slate-500 group-hover:text-indigo-400 transition-transform group-hover:translate-x-0.5" />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
+                            {summary}
+                          </span>
+                        </td>
+
+                        {/* Last Updated - Centered */}
+                        <td className="py-3 px-3 text-center whitespace-nowrap text-slate-400 text-[11px]">
+                          {formatDate(lead.last_updated)}
+                        </td>
+
+                        {/* Action - Centered */}
+                        <td className="py-3 px-4 text-center">
+                          <div className="inline-flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => handleQuickCall(e, lead)}
+                              className="px-2.5 py-1 rounded-lg bg-indigo-600/15 hover:bg-indigo-600/25 border border-indigo-500/30 text-indigo-300 font-medium text-[11px] flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-xs"
+                              title="Direct Outbound Call"
+                            >
+                              <PhoneForwarded className="w-3 h-3 text-indigo-400" />
+                              <span>Call</span>
+                            </button>
+                            <ChevronRightIcon className="w-4 h-4 text-slate-500 group-hover:text-indigo-400 transition-transform group-hover:translate-x-0.5" />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
               )}
             </tbody>
           </table>

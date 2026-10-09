@@ -168,6 +168,23 @@ export default function CallDetailsDrawer({ call, onClose, baseUrl }) {
           />
         </div>
 
+        {/* Failure / Hangup Cause Banner */}
+        {(call.disposition === "failed" || call.call_status === "failed") && (
+          <div className="p-4 bg-rose-950/20 border border-rose-500/25 rounded-2xl">
+            <div className="flex items-center gap-2 mb-1.5 text-rose-400 font-semibold text-xs">
+              <AlertCircle className="w-4 h-4 text-rose-400" />
+              <span>Call Failed / Unsuccessful</span>
+            </div>
+            <p className="text-xs text-rose-300/90 leading-relaxed font-sans">
+              {call.hangup?.cause === "failed_out_of_credits"
+                ? "This call failed because Plivo API account credits have been exhausted."
+                : call.hangup?.cause
+                  ? `Reason: ${call.hangup.cause.replace(/_/g, " ")}`
+                  : "Call failed to connect to the recipient's phone."}
+            </p>
+          </div>
+        )}
+
         {/* AI Conversation Summary Card */}
         {call.ai_insights?.summary && (
           <div className="p-4 bg-linear-to-br from-violet-950/30 to-indigo-950/20 border border-violet-500/25 rounded-2xl">
