@@ -179,12 +179,13 @@ export default function CRMBulkCallModal({
         if (res.data && res.data.success) {
           const triggerId = res.data?.data?.trigger_id;
 
-          let finalStatus = "completed";
-          let failReason = null;
+          // Default to pending/unverified
+          let finalStatus = "failed";
+          let failReason = "failed_out_of_credits / not answered";
 
           if (triggerId) {
-            // Poll for up to 3.5 seconds (intervals of 800ms) to receive Plivo's hangup webhook
-            for (let attempt = 0; attempt < 4; attempt++) {
+            // Poll for up to 4 seconds (intervals of 800ms) to check Plivo's outcome
+            for (let attempt = 0; attempt < 5; attempt++) {
               await new Promise((r) => setTimeout(r, 800));
               try {
                 const callCheck = await axios.get(
@@ -195,6 +196,14 @@ export default function CRMBulkCallModal({
                 const hangupCause = (callData?.hangup?.cause || "").toLowerCase();
 
                 if (
+                  serverStatus === "answered" ||
+                  serverStatus === "completed" ||
+                  serverStatus === "in-progress"
+                ) {
+                  finalStatus = "completed";
+                  failReason = null;
+                  break;
+                } else if (
                   serverStatus === "failed" ||
                   serverStatus === "rejected" ||
                   serverStatus === "busy" ||
@@ -205,9 +214,9 @@ export default function CRMBulkCallModal({
                   finalStatus = "failed";
                   failReason = callData?.hangup?.cause || callData?.call_status || "failed_out_of_credits";
                   break;
-                } else if (serverStatus === "answered" || serverStatus === "completed") {
-                  finalStatus = "completed";
-                  break;
+                } else {
+                  // Still "initiated" or "pending"
+                  failReason = hangupCause || "failed_out_of_credits";
                 }
               } catch (errCheck) {
                 console.warn("Could not check call status:", errCheck);

@@ -103,11 +103,22 @@ class WebhookService:
                 ]
             )
 
-        if not query_or:
-            logger.warning("Hangup event received without identifier: %s", event_data)
-            return
+        to_num = (
+            event_data.get("to_number")
+            or event_data.get("To")
+            or sub.get("Place Guest Call.to")
+            or sub.get("to")
+            or obj.get("to")
+        )
 
-        query = {"$or": query_or}
+        if not query_or:
+            if to_num:
+                query = {"telephony.to_number": str(to_num), "call_status": "initiated"}
+            else:
+                logger.warning("Hangup event received without identifier: %s", event_data)
+                return
+        else:
+            query = {"$or": query_or}
 
         # Check if call failed or was answered
         if (
