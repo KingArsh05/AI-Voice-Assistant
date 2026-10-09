@@ -114,7 +114,7 @@ class CallQueueService:
             "message": f"Successfully queued {total_contacts} calls for batch processing.",
         }
 
-    def _dispatch_single_call(self, item: dict) -> None:
+    def _dispatch_single_call(self, item: dict) -> dict:
         call_req = OutboundCallRequest(
             hotel_id=item["hotel_id"],
             guest_name=item["guest_name"],
@@ -122,7 +122,7 @@ class CallQueueService:
             guest_lead=item["guest_lead"],
             dry_run=item["dry_run"],
         )
-        self.single_call_service.make_single_call(call_req)
+        return self.single_call_service.make_single_call(call_req)
 
     def _process_queue_worker(self) -> None:
         """Continuous background worker loop."""
@@ -144,10 +144,24 @@ class CallQueueService:
                 f"\n⚡ [STEP 2: PICKED] Worker picked up call for: {item['guest_name']} ({item['to_number']}) | Remaining in queue: {self.queue.qsize()}"
             )
 
+            batch_mongo_id = item.get("id")
+            to_number = item.get("to_number")
+            call_status = "completed"
+
             try:
+                # Mark contact as calling/processing in db
+                if batch_mongo_id:
+                    try:
+                        self.db["voice_batch_jobs"].update_one(
+                            {"_id": ObjectId(batch_mongo_id), "contacts_summary.to_number": to_number},
+                            {"$set": {"status": "processing", "contacts_summary.$.status": "calling", "updated_at": datetime.now(timezone.utc)}}
+                        )
+                    except Exception as db_err:
+                        logger.warning("Could not update contact calling status: %s", db_err)
+
                 self.call_completed_event.clear()
 
-                self._dispatch_single_call(item)
+                dispatch_res = self._dispatch_single_call(item)
                 is_dry_run = item.get("dry_run", False)
 
                 if is_dry_run:
@@ -156,24 +170,53 @@ class CallQueueService:
                         f"🧪 [DRY RUN SIMULATED] Call simulated for {item['guest_name']}"
                     )
                 else:
-                    # 🔴 LIVE CALL: Wait for Plivo hangup/recording webhook to trigger event
-                    self.call_completed_event.clear()
-                    print(
-                        f"📞 [CALL INITIATED] Waiting for live call webhook for {item['guest_name']}..."
-                    )
-                    finished = self.call_completed_event.wait(timeout=240)
-                    if not finished:
+                    # Check if dispatch actually succeeded or was rejected
+                    if not dispatch_res or not dispatch_res.get("success"):
+                        call_status = "failed"
+                        print(f"⚠️ Dispatch failed for {item['guest_name']}, skipping webhook wait.")
+                    else:
+                        # 🔴 LIVE CALL: Wait for Plivo hangup/recording webhook to trigger event
+                        self.call_completed_event.clear()
                         print(
-                            f"⚠️ Call for {item['guest_name']} timed out after 4 mins, moving on."
+                            f"📞 [CALL INITIATED] Waiting for call status/hangup webhook for {item['guest_name']}..."
                         )
+                        # In local development or when webhook cannot reach localhost, use 10s fallback
+                        finished = self.call_completed_event.wait(timeout=15)
+                        if not finished:
+                            print(
+                                f"⚠️ [PROCEEDING] Webhook for {item['guest_name']} done/timed out. Advancing queue to next call..."
+                            )
                 delay = item.get("rate_limit_second") or 2
                 print(f"⏳ Sleeping {delay}s rate limit before next call...")
                 time.sleep(delay)
 
             except Exception as e:
+                call_status = "failed"
                 print(f"❌ [STEP 3: ERROR] Failed to dispatch call: {e}")
                 logger.error("Error processing queue item: %s", e)
             finally:
+                if batch_mongo_id:
+                    try:
+                        self.db["voice_batch_jobs"].update_one(
+                            {"_id": ObjectId(batch_mongo_id), "contacts_summary.to_number": to_number},
+                            {
+                                "$set": {
+                                    "contacts_summary.$.status": call_status,
+                                    "updated_at": datetime.now(timezone.utc)
+                                },
+                                "$inc": {"processed_count": 1}
+                            }
+                        )
+                        # Check if all completed
+                        job = self.db["voice_batch_jobs"].find_one({"_id": ObjectId(batch_mongo_id)})
+                        if job and job.get("processed_count", 0) >= job.get("total_count", 0):
+                            self.db["voice_batch_jobs"].update_one(
+                                {"_id": ObjectId(batch_mongo_id)},
+                                {"$set": {"status": "completed", "completed_at": datetime.now(timezone.utc)}}
+                            )
+                    except Exception as db_err:
+                        logger.warning("Could not update batch completion status: %s", db_err)
+
                 self.queue.task_done()
                 print(f"🏁 [STEP 5: DONE] Task completed for {item['guest_name']}")
 
@@ -223,10 +266,15 @@ class CallQueueService:
         """
         Retrieves real-time progress for frontend status indicators.
         """
-        job = self.db["voice_batch_jobs"].find_one({"batch_id": batch_id})
+        try:
+            job = self.db["voice_batch_jobs"].find_one({"_id": ObjectId(batch_id)})
+        except Exception:
+            job = self.db["voice_batch_jobs"].find_one({"batch_id": batch_id})
+
         if not job:
             return None
 
+        job["batch_id"] = str(job["_id"])
         job["_id"] = str(job["_id"])
         for dt_field in ["created_at", "updated_at", "started_at", "completed_at"]:
             if isinstance(job.get(dt_field), datetime):

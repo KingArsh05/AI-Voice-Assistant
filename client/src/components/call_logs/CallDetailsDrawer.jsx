@@ -11,6 +11,7 @@ import {
   Check,
   IndianRupee,
   Tag,
+  AlertCircle,
 } from "lucide-react";
 import AnimatedAudioWaveform from "./AnimatedAudioWaveform";
 import { CallStatusBadge, SentimentBadge } from "./CallStatusBadge";
@@ -294,7 +295,7 @@ export default function CallDetailsDrawer({ call, onClose, baseUrl }) {
         <div className="p-3 bg-slate-950/40 border border-slate-800/60 rounded-xl space-y-1.5 text-[11px] text-slate-400 font-mono">
           <div className="flex justify-between">
             <span>Call UUID:</span>
-            <span className="text-slate-300 truncate max-w-[260px]">
+            <span className="text-slate-300 truncate max-w-65">
               {call.identifiers?.call_uuid || "—"}
             </span>
           </div>

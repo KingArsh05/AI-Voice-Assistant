@@ -10,11 +10,16 @@ import {
   PhoneForwarded,
   Sparkles,
   ChevronRightIcon,
+  CheckSquare,
+  Megaphone,
+  Check,
+  Minus,
 } from "lucide-react";
 import { StandaloneSelect } from "../common/FormControl";
 import CRMIntentBadge from "./CRMIntentBadge";
 import CRMLeadDrawer from "./CRMLeadDrawer";
 import CRMCallModal from "./CRMCallModal";
+import CRMBulkCallModal from "./CRMBulkCallModal";
 
 export default function CRMData() {
   const BASE_URL = import.meta.env.VITE_BASE_URL;
@@ -36,6 +41,10 @@ export default function CRMData() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLead, setSelectedLead] = useState(null);
   const [callingLead, setCallingLead] = useState(null);
+
+  // Row selection state for bulk actions
+  const [selectedLeadIds, setSelectedLeadIds] = useState(new Set());
+  const [isBulkCallModalOpen, setIsBulkCallModalOpen] = useState(false);
 
   const totalPages = Math.ceil(total / limit) || 1;
 
@@ -196,6 +205,62 @@ export default function CRMData() {
     }
   };
 
+  const sortedLeads = useMemo(() => {
+    return [...filteredLeads].sort(
+      (a, b) => new Date(b.last_updated) - new Date(a.last_updated),
+    );
+  }, [filteredLeads]);
+
+  // Selected lead objects
+  const selectedLeadsList = useMemo(() => {
+    if (selectedLeadIds.size === 0) return [];
+    return leads.filter((l) => selectedLeadIds.has(l._id));
+  }, [leads, selectedLeadIds]);
+
+  // Are all displayed leads selected?
+  const isAllCurrentPageSelected = useMemo(() => {
+    if (sortedLeads.length === 0) return false;
+    return sortedLeads.every((l) => selectedLeadIds.has(l._id));
+  }, [sortedLeads, selectedLeadIds]);
+
+  const isSomeCurrentPageSelected = useMemo(() => {
+    return (
+      sortedLeads.some((l) => selectedLeadIds.has(l._id)) &&
+      !isAllCurrentPageSelected
+    );
+  }, [sortedLeads, selectedLeadIds, isAllCurrentPageSelected]);
+
+  // Toggle single lead selection
+  const handleToggleLead = (e, leadId) => {
+    e.stopPropagation();
+    setSelectedLeadIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(leadId)) {
+        next.delete(leadId);
+      } else {
+        next.add(leadId);
+      }
+      return next;
+    });
+  };
+
+  // Toggle select all on current page
+  const handleToggleSelectAll = () => {
+    setSelectedLeadIds((prev) => {
+      const next = new Set(prev);
+      if (isAllCurrentPageSelected) {
+        sortedLeads.forEach((l) => next.delete(l._id));
+      } else {
+        sortedLeads.forEach((l) => next.add(l._id));
+      }
+      return next;
+    });
+  };
+
+  const handleClearSelection = () => {
+    setSelectedLeadIds(new Set());
+  };
+
   const handleQuickCall = (e, lead) => {
     e.stopPropagation();
     setCallingLead(lead);
@@ -333,13 +398,69 @@ export default function CRMData() {
           </div>
         </div>
 
-        {/* Counter */}
-        <div className="text-xs text-slate-400 font-mono">
-          Showing{" "}
-          <span className="text-white font-bold">{filteredLeads.length}</span>{" "}
-          of {total} leads
+        {/* Counter & Bulk Action Status */}
+        <div className="flex items-center gap-3">
+          <div className="text-xs text-slate-400 font-mono">
+            Showing{" "}
+            <span className="text-white font-bold">{filteredLeads.length}</span>{" "}
+            of {total} leads
+          </div>
         </div>
       </div>
+
+      {/* Floating / Sticky Bulk Selection Bar when rows are selected */}
+      {selectedLeadIds.size > 0 && (
+        <div className="bg-indigo-950/70 border border-indigo-500/40 rounded-2xl p-3 px-4 backdrop-blur-xl shadow-xl flex flex-wrap items-center justify-between gap-3 shrink-0 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-indigo-600/30 text-indigo-300 rounded-xl border border-indigo-500/30">
+              <CheckSquare className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>{selectedLeadIds.size}</span>
+                <span>{selectedLeadIds.size === 1 ? "lead selected" : "leads selected"}</span>
+              </div>
+              <div className="text-[11px] text-indigo-300/80">
+                Choose an action below for your selected CRM records
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Feature 1: Bulk Call Button */}
+            <button
+              type="button"
+              onClick={() => setIsBulkCallModalOpen(true)}
+              className="h-8.5 px-3.5 rounded-xl bg-linear-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
+            >
+              <PhoneForwarded className="w-3.5 h-3.5" />
+              <span>Initiate Bulk Call ({selectedLeadIds.size})</span>
+            </button>
+
+            {/* Feature 2: Run Campaign (UI ready) */}
+            <button
+              type="button"
+              onClick={() => {
+                alert(`Run Campaign for ${selectedLeadIds.size} selected leads is coming in next phase!`);
+              }}
+              className="h-8.5 px-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white text-xs font-medium flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
+              title="Feature 2: Run Campaign for selected leads"
+            >
+              <Megaphone className="w-3.5 h-3.5 text-violet-400" />
+              <span>Run Campaign</span>
+            </button>
+
+            {/* Clear Selection */}
+            <button
+              type="button"
+              onClick={handleClearSelection}
+              className="h-8.5 px-2.5 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 text-xs transition-colors cursor-pointer"
+            >
+              Deselect All
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* CRM Leads Table */}
       <div className="flex-1 bg-slate-900/60 border border-slate-800/80 rounded-2xl overflow-hidden flex flex-col shadow-xl min-h-0">
@@ -347,8 +468,35 @@ export default function CRMData() {
           <table className="w-full min-w-215 table-fixed text-xs border-collapse">
             <thead className="bg-slate-950/70 text-slate-400 uppercase text-[10px] tracking-wider sticky top-0 z-10 border-b border-slate-800/90 backdrop-blur-md">
               <tr>
-                {/* Fixed column ratios: wider Lead Context / Summary (38%) */}
-                <th className="w-[18%] py-3 px-4 text-center font-semibold">
+                {/* Select All Checkbox Column */}
+                <th className="w-[4%] py-3 px-3 text-center">
+                  <div className="flex items-center justify-center">
+                    <button
+                      type="button"
+                      onClick={handleToggleSelectAll}
+                      className={`w-4.5 h-4.5 rounded-md flex items-center justify-center transition-all duration-150 cursor-pointer border ${
+                        isAllCurrentPageSelected
+                          ? "bg-linear-to-br from-indigo-500 to-indigo-600 border-indigo-400 text-white shadow-xs shadow-indigo-500/40"
+                          : isSomeCurrentPageSelected
+                          ? "bg-indigo-600/30 border-indigo-400/80 text-indigo-300"
+                          : "bg-slate-900/90 border-slate-700/80 hover:border-slate-500 hover:bg-slate-800 text-transparent"
+                      }`}
+                      title={
+                        isAllCurrentPageSelected
+                          ? "Deselect all on this page"
+                          : "Select all on this page"
+                      }
+                    >
+                      {isAllCurrentPageSelected ? (
+                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                      ) : isSomeCurrentPageSelected ? (
+                        <Minus className="w-3.5 h-3.5 stroke-[3]" />
+                      ) : null}
+                    </button>
+                  </div>
+                </th>
+                {/* Fixed column ratios: wider Lead Context / Summary */}
+                <th className="w-[17%] py-3 px-4 text-center font-semibold">
                   Guest Contact
                 </th>
                 <th className="w-[10%] py-3 px-3 text-center font-semibold">
@@ -357,7 +505,7 @@ export default function CRMData() {
                 <th className="w-[13%] py-3 px-3 text-center font-semibold">
                   Primary Intent
                 </th>
-                <th className="w-[37%] py-3 px-4 text-center font-semibold">
+                <th className="w-[34%] py-3 px-4 text-center font-semibold">
                   Lead Context / Summary
                 </th>
                 <th className="w-[12%] py-3 px-3 text-center font-semibold">
@@ -371,7 +519,7 @@ export default function CRMData() {
             <tbody className="divide-y divide-slate-800/60 font-sans">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="py-16 text-center text-slate-400">
+                  <td colSpan={7} className="py-16 text-center text-slate-400">
                     <div className="flex items-center justify-center gap-2">
                       <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" />
                       <span>Loading CRM leads...</span>
@@ -380,7 +528,7 @@ export default function CRMData() {
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan={6} className="py-16 text-center text-rose-400">
+                  <td colSpan={7} className="py-16 text-center text-rose-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <span>{error}</span>
                       <button
@@ -393,96 +541,127 @@ export default function CRMData() {
                     </div>
                   </td>
                 </tr>
-              ) : filteredLeads.length === 0 ? (
+              ) : sortedLeads.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-16 text-center text-slate-400">
+                  <td colSpan={7} className="py-16 text-center text-slate-400">
                     No CRM records found matching your filters.
                   </td>
                 </tr>
               ) : (
-                filteredLeads
-                  .sort(
-                    (a, b) =>
-                      new Date(b.last_updated) - new Date(a.last_updated),
-                  )
-                  .map((lead) => {
-                    const guestName = lead.guest_name || "Guest";
-                    const phoneNumber = lead.phone_number
-                      ? `+${lead.phone_number.slice(0, 2)} ${lead.phone_number.slice(2)}`
-                      : "—";
-                    const summary = lead.summary || "No inquiry notes logged.";
+                sortedLeads.map((lead) => {
+                  const guestName = lead.guest_name || "Guest";
+                  const phoneNumber = lead.phone_number
+                    ? `+${lead.phone_number.slice(0, 2)} ${lead.phone_number.slice(2)}`
+                    : "—";
+                  const summary = lead.summary || "No inquiry notes logged.";
+                  const isSelected = selectedLeadIds.has(lead._id);
 
-                    return (
-                      <tr
-                        key={lead._id}
-                        onClick={() => setSelectedLead(lead)}
-                        className="hover:bg-slate-800/40 transition-colors cursor-pointer group"
+                  return (
+                    <tr
+                      key={lead._id}
+                      onClick={() => setSelectedLead(lead)}
+                      className={`transition-colors cursor-pointer group ${
+                        isSelected
+                          ? "bg-indigo-950/40 hover:bg-indigo-950/60"
+                          : "hover:bg-slate-800/40"
+                      }`}
+                    >
+                      {/* Selection Checkbox */}
+                      <td
+                        className="py-3 px-3 text-center"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        {/* Guest Contact - Left Aligned */}
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="w-8 h-8 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/20 flex items-center justify-center font-bold text-xs shrink-0">
-                              {guestName[0]?.toUpperCase()}
-                            </div>
-                            <div className="min-w-0 truncate">
-                              <span className="font-semibold text-white block group-hover:text-indigo-300 transition-colors truncate">
-                                {guestName}
-                              </span>
-                              <span className="text-[11px] text-slate-400 font-mono block truncate">
-                                {phoneNumber}
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Hotel - Centered */}
-                        <td className="py-3 px-3 text-center whitespace-nowrap">
-                          <span className="inline-flex items-center justify-center gap-1.5 text-slate-300 font-mono">
-                            <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span>{lead.hotel_id || "—"}</span>
-                          </span>
-                        </td>
-
-                        {/* Primary Intent - Centered */}
-                        <td className="py-3 px-3 text-center whitespace-nowrap">
-                          <div className="flex justify-center">
-                            <CRMIntentBadge intent={lead.primary_intent} />
-                          </div>
-                        </td>
-
-                        {/* Lead Summary - Left-aligned text with wider reading width */}
-                        <td className="py-3 px-4 text-left text-slate-300 text-[11px]">
-                          <span
-                            title={summary}
-                            className="line-clamp-2 mx-auto block max-w-xl leading-relaxed"
+                        <div className="flex items-center justify-center">
+                          <button
+                            type="button"
+                            onClick={(e) => handleToggleLead(e, lead._id)}
+                            className={`w-4.5 h-4.5 rounded-md flex items-center justify-center transition-all duration-150 cursor-pointer border ${
+                              isSelected
+                                ? "bg-linear-to-br from-indigo-500 to-indigo-600 border-indigo-400 text-white shadow-xs shadow-indigo-500/40 scale-100"
+                                : "bg-slate-900/90 border-slate-700/80 hover:border-indigo-400/60 hover:bg-slate-850 group-hover:border-slate-600 text-transparent"
+                            }`}
+                            title={isSelected ? "Deselect row" : "Select row"}
                           >
-                            {summary}
-                          </span>
-                        </td>
+                            <Check
+                              className={`w-3.5 h-3.5 stroke-[3] transition-transform duration-150 ${
+                                isSelected ? "scale-100 opacity-100" : "scale-50 opacity-0"
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </td>
 
-                        {/* Last Updated - Centered */}
-                        <td className="py-3 px-3 text-center whitespace-nowrap text-slate-400 text-[11px]">
-                          {formatDate(lead.last_updated)}
-                        </td>
-
-                        {/* Action - Centered */}
-                        <td className="py-3 px-4 text-center">
-                          <div className="inline-flex items-center justify-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={(e) => handleQuickCall(e, lead)}
-                              className="px-2.5 py-1 rounded-lg bg-indigo-600/15 hover:bg-indigo-600/25 border border-indigo-500/30 text-indigo-300 font-medium text-[11px] flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-xs"
-                              title="Direct Outbound Call"
-                            >
-                              <PhoneForwarded className="w-3 h-3 text-indigo-400" />
-                              <span>Call</span>
-                            </button>
-                            <ChevronRightIcon className="w-4 h-4 text-slate-500 group-hover:text-indigo-400 transition-transform group-hover:translate-x-0.5" />
+                      {/* Guest Contact - Left Aligned */}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div
+                            className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition-colors ${
+                              isSelected
+                                ? "bg-indigo-600/30 text-indigo-300 border border-indigo-400/40"
+                                : "bg-indigo-600/20 text-indigo-400 border border-indigo-500/20"
+                            }`}
+                          >
+                            {guestName[0]?.toUpperCase()}
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })
+                          <div className="min-w-0 truncate">
+                            <span className="font-semibold text-white block group-hover:text-indigo-300 transition-colors truncate">
+                              {guestName}
+                            </span>
+                            <span className="text-[11px] text-slate-400 font-mono block truncate">
+                              {phoneNumber}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Hotel - Centered */}
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
+                        <span className="inline-flex items-center justify-center gap-1.5 text-slate-300 font-mono">
+                          <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>{lead.hotel_id || "—"}</span>
+                        </span>
+                      </td>
+
+                      {/* Primary Intent - Centered */}
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
+                        <div className="flex justify-center">
+                          <CRMIntentBadge intent={lead.primary_intent} />
+                        </div>
+                      </td>
+
+                      {/* Lead Summary - Left-aligned text with wider reading width */}
+                      <td className="py-3 px-4 text-left text-slate-300 text-[11px]">
+                        <span
+                          title={summary}
+                          className="line-clamp-2 mx-auto block max-w-xl leading-relaxed"
+                        >
+                          {summary}
+                        </span>
+                      </td>
+
+                      {/* Last Updated - Centered */}
+                      <td className="py-3 px-3 text-center whitespace-nowrap text-slate-400 text-[11px]">
+                        {formatDate(lead.last_updated)}
+                      </td>
+
+                      {/* Action - Centered */}
+                      <td className="py-3 px-4 text-center">
+                        <div className="inline-flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => handleQuickCall(e, lead)}
+                            className="px-2.5 py-1 rounded-lg bg-indigo-600/15 hover:bg-indigo-600/25 border border-indigo-500/30 text-indigo-300 font-medium text-[11px] flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-xs"
+                            title="Direct Outbound Call"
+                          >
+                            <PhoneForwarded className="w-3 h-3 text-indigo-400" />
+                            <span>Call</span>
+                          </button>
+                          <ChevronRightIcon className="w-4 h-4 text-slate-500 group-hover:text-indigo-400 transition-transform group-hover:translate-x-0.5" />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -552,7 +731,7 @@ export default function CRMData() {
         </>
       )}
 
-      {/* Confirmation Call Popup Modal */}
+      {/* Confirmation Call Popup Modal (Single Call) */}
       {callingLead && (
         <CRMCallModal
           lead={callingLead}
@@ -563,6 +742,17 @@ export default function CRMData() {
           }}
         />
       )}
+
+      {/* Bulk Call Modal for Selected CRM Leads */}
+      <CRMBulkCallModal
+        isOpen={isBulkCallModalOpen}
+        onClose={() => setIsBulkCallModalOpen(false)}
+        selectedLeads={selectedLeadsList}
+        hotels={hotels}
+        onSuccess={() => {
+          // Keep selection or notify
+        }}
+      />
     </div>
   );
 }

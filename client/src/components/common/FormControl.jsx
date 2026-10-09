@@ -594,7 +594,7 @@ export const StandaloneStepper = ({
 
       <div className="w-px bg-slate-800 shrink-0" />
 
-      <div className="px-2.5 flex items-center justify-center gap-1 min-w-[54px] bg-slate-950/40">
+      <div className="px-2.5 flex-1 flex items-center justify-center gap-1 min-w-[54px] bg-slate-950/40">
         {prefix && <span className="text-slate-400 text-xs font-mono">{prefix}</span>}
         <span className="text-xs font-mono font-semibold text-indigo-300">
           {numValue.toFixed(1)}
