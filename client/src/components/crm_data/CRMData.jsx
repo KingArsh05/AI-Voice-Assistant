@@ -488,9 +488,9 @@ export default function CRMData() {
                       }
                     >
                       {isAllCurrentPageSelected ? (
-                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        <Check className="w-3.5 h-3.5 stroke-3" />
                       ) : isSomeCurrentPageSelected ? (
-                        <Minus className="w-3.5 h-3.5 stroke-[3]" />
+                        <Minus className="w-3.5 h-3.5 stroke-3" />
                       ) : null}
                     </button>
                   </div>
@@ -583,7 +583,7 @@ export default function CRMData() {
                             title={isSelected ? "Deselect row" : "Select row"}
                           >
                             <Check
-                              className={`w-3.5 h-3.5 stroke-[3] transition-transform duration-150 ${
+                              className={`w-3.5 h-3.5 stroke-3 transition-transform duration-150 ${
                                 isSelected ? "scale-100 opacity-100" : "scale-50 opacity-0"
                               }`}
                             />

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import {
@@ -21,6 +21,14 @@ import {
 } from "lucide-react";
 import { StandaloneSelect, StandaloneStepper } from "../common/FormControl";
 
+// Generate unique batch ID outside component render scope
+const createBatchId = () => {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return `batch_${crypto.randomUUID().slice(0, 8)}`;
+  }
+  return `batch_${Date.now().toString(36)}`;
+};
+
 export default function CRMBulkCallModal({
   isOpen,
   onClose,
@@ -31,7 +39,18 @@ export default function CRMBulkCallModal({
   const BASE_URL = import.meta.env.VITE_BASE_URL;
 
   // Selected hotel for knowledge base
-  const [selectedHotelId, setSelectedHotelId] = useState("");
+  const [selectedHotelId, setSelectedHotelId] = useState(() => {
+    const leadHotels = [
+      ...new Set(
+        selectedLeads
+          .map((l) => l.hotel_id)
+          .filter((h) => h && h !== "—" && h !== "None"),
+      ),
+    ];
+    if (leadHotels.length === 1 && leadHotels[0]) return String(leadHotels[0]);
+    if (hotels.length > 0) return String(hotels[0].hotel_id);
+    return "111111";
+  });
   const [rateLimitSecond, setRateLimitSecond] = useState(2.0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -56,27 +75,6 @@ export default function CRMBulkCallModal({
     setIsSubmitting(false);
     onClose();
   };
-
-  // Sync default hotel selection when modal opens or leads change
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const leadHotels = [
-      ...new Set(
-        selectedLeads
-          .map((l) => l.hotel_id)
-          .filter((h) => h && h !== "—" && h !== "None"),
-      ),
-    ];
-
-    if (leadHotels.length === 1 && leadHotels[0]) {
-      setSelectedHotelId(String(leadHotels[0]));
-    } else if (hotels.length > 0) {
-      setSelectedHotelId(String(hotels[0].hotel_id));
-    } else {
-      setSelectedHotelId("111111");
-    }
-  }, [isOpen, selectedLeads, hotels]);
 
   // Transform leads into contacts payload format
   const formattedContacts = selectedLeads.map((lead) => {
@@ -117,7 +115,7 @@ export default function CRMBulkCallModal({
     }
 
     setIsSubmitting(true);
-    const generatedBatchId = `batch_${window.crypto?.randomUUID ? window.crypto.randomUUID().slice(0, 8) : String(performance.now()).replace(".", "")}`;
+    const generatedBatchId = createBatchId();
     setBatchId(generatedBatchId);
     setQueueStatus("running");
     setProcessedCount(0);
@@ -444,11 +442,11 @@ export default function CRMBulkCallModal({
 
           {/* Real-time Progress Bar when Batch is Active */}
           {batchId && (
-            <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2.5">
+            <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2.5">
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-white">Batch Progress</span>
-                  <span className="text-slate-400 font-mono">
+                  <span className="font-semibold text-white tracking-wide">Batch Progress</span>
+                  <span className="text-slate-400 font-mono text-[11px]">
                     ({processedCount} of {totalCount} calls dispatched)
                   </span>
                 </div>
@@ -458,9 +456,9 @@ export default function CRMBulkCallModal({
               </div>
 
               {/* Visual Progress Bar */}
-              <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+              <div className="w-full h-2 bg-slate-900 border border-slate-800 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-linear-to-r from-indigo-500 via-violet-500 to-emerald-400 transition-all duration-500 rounded-full"
+                  className="h-full bg-indigo-500 transition-all duration-500 rounded-full"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
@@ -527,7 +525,7 @@ export default function CRMBulkCallModal({
                             className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center shadow-xs"
                             title="Call completed"
                           >
-                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                            <Check className="w-2.5 h-2.5 stroke-3" />
                           </div>
                         )}
                         {isCalling && (
@@ -543,7 +541,7 @@ export default function CRMBulkCallModal({
                             className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-xs"
                             title="Call failed"
                           >
-                            <X className="w-2.5 h-2.5 stroke-[3]" />
+                            <X className="w-2.5 h-2.5 stroke-3" />
                           </div>
                         )}
                       </div>
