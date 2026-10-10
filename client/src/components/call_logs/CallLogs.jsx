@@ -40,8 +40,10 @@ export default function CallLogs() {
   const statusSelectOptions = [
     { value: "all", label: "All Statuses", subLabel: "Full records" },
     { value: "completed", label: "Completed", subLabel: "Answered calls" },
+    { value: "unanswered", label: "No Answer", subLabel: "Ring timeout" },
     { value: "busy", label: "Busy", subLabel: "Line engaged" },
-    { value: "rejected", label: "Failed / Rejected", subLabel: "Unsuccessful" },
+    { value: "rejected", label: "Declined", subLabel: "User cut call" },
+    { value: "failed", label: "Failed", subLabel: "Telephony error" },
   ];
 
   // Rows Per Page Options for Custom Select
@@ -162,12 +164,15 @@ export default function CallLogs() {
   const formatDate = (isoStr) => {
     if (!isoStr) return "—";
     try {
-      const d = new Date(isoStr);
-      return d.toLocaleDateString("en-IN", {
+      const s = String(isoStr);
+      const parsedDate = s.endsWith("Z") || s.includes("+") ? new Date(s) : new Date(s + "Z");
+      return parsedDate.toLocaleDateString("en-IN", {
+        timeZone: "Asia/Kolkata",
         day: "numeric",
         month: "short",
         hour: "2-digit",
         minute: "2-digit",
+        hour12: true,
       });
     } catch {
       return isoStr;

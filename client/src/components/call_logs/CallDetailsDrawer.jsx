@@ -53,13 +53,16 @@ export default function CallDetailsDrawer({ call, onClose, baseUrl }) {
   const formatDate = (isoStr) => {
     if (!isoStr) return "—";
     try {
-      const d = new Date(isoStr);
-      return d.toLocaleDateString("en-IN", {
+      const s = String(isoStr);
+      const parsedDate = s.endsWith("Z") || s.includes("+") ? new Date(s) : new Date(s + "Z");
+      return parsedDate.toLocaleDateString("en-IN", {
+        timeZone: "Asia/Kolkata",
         day: "numeric",
         month: "short",
         year: "numeric",
         hour: "2-digit",
         minute: "2-digit",
+        hour12: true,
       });
     } catch {
       return isoStr;

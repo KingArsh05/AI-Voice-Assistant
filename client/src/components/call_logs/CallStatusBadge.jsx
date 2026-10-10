@@ -24,16 +24,34 @@ export function CallStatusBadge({ status, call }) {
     );
   }
 
-  if (norm === "busy" || norm === "rejected" || norm === "failed") {
+  if (norm === "busy") {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/25">
-        <PhoneMissed className="w-3 h-3 text-rose-400" />
-        <span className="capitalize">{norm}</span>
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/25">
+        <PhoneMissed className="w-3 h-3 text-purple-400" />
+        <span>Busy</span>
       </span>
     );
   }
 
-  if (norm === "no_answer" || norm === "unanswered") {
+  if (norm === "rejected" || norm === "declined") {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-orange-500/10 text-orange-400 border border-orange-500/25">
+        <PhoneMissed className="w-3 h-3 text-orange-400" />
+        <span>Declined</span>
+      </span>
+    );
+  }
+
+  if (norm === "failed") {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-rose-500/10 text-rose-400 border border-rose-500/25">
+        <AlertCircle className="w-3 h-3 text-rose-400" />
+        <span>Failed</span>
+      </span>
+    );
+  }
+
+  if (norm === "no_answer" || norm === "no-answer" || norm === "unanswered") {
     return (
       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/25">
         <AlertCircle className="w-3 h-3 text-amber-400" />

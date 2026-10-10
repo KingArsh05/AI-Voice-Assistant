@@ -14,7 +14,6 @@ from src.services.voice.media_service import MediaService
 
 logger = logging.getLogger(__name__)
 
-
 class WebhookService:
     def __init__(
         self, media_service: Optional[MediaService] = None, call_queue_service=None
@@ -124,28 +123,66 @@ class WebhookService:
         else:
             query = {"$or": query_or}
 
-        # Check if call failed or was answered
-        if (
-            "failed" in raw_status
-            or "credit" in raw_status
-            or raw_status == "failed_out_of_credits"
-        ):
+        # Detailed Plivo hangup cause and status extraction
+        raw_cause = str(
+            event_data.get("hangup_cause")
+            or event_data.get("hangup_cause_name")
+            or sub.get("hangup_cause")
+            or sub.get("Place Guest Call.hangup_cause")
+            or obj.get("hangup_cause")
+            or ""
+        ).lower()
+
+        # Check if call failed or was answered / busy / no-answer / rejected
+        if "failed_out_of_credits" in raw_status or "credit" in raw_status:
             call_status = "failed"
             disposition = "failed"
-        elif duration > 0 or "completed" in raw_status:
-            call_status = "answered"
-            disposition = "completed"
-        elif "busy" in raw_status:
+            hangup_cause_label = "Insufficient Credits"
+        elif "busy" in raw_status or "busy" in raw_cause or "user_busy" in raw_cause:
             call_status = "busy"
             disposition = "busy"
-        elif "no_answer" in raw_status or "timeout" in raw_status:
+            hangup_cause_label = "User Busy / On Another Call"
+        elif (
+            "rejected" in raw_status
+            or "rejected" in raw_cause
+            or "call_rejected" in raw_cause
+            or "decline" in raw_cause
+        ):
+            call_status = "rejected"
+            disposition = "rejected"
+            hangup_cause_label = "Call Declined by User"
+        elif (
+            "no_answer" in raw_status
+            or "no-answer" in raw_status
+            or "timeout" in raw_status
+            or "timeout" in raw_cause
+            or "no_answer" in raw_cause
+            or "no answer" in raw_cause
+            or "ring timeout" in raw_cause
+        ):
             call_status = "no_answer"
             disposition = "unanswered"
-        else:
-            call_status = "rejected"
+            hangup_cause_label = "Ring Timeout / Unanswered"
+        elif duration > 0 or "completed" in raw_status or "answered" in raw_status:
+            call_status = "answered"
+            disposition = "completed"
+            hangup_cause_label = "Normal Hangup"
+        elif "failed" in raw_status or "failed" in raw_cause:
+            call_status = "failed"
             disposition = "failed"
+            hangup_cause_label = "Call Failed"
+        else:
+            # If duration is 0 and not explicitly answered, mark as unanswered / no_answer
+            if duration == 0:
+                call_status = "no_answer"
+                disposition = "unanswered"
+                hangup_cause_label = "Unanswered"
+            else:
+                call_status = "answered"
+                disposition = "completed"
+                hangup_cause_label = "Normal Hangup"
 
-        if "customer" in hangup_source or "user" in hangup_source:
+        if "customer" in hangup_source or "user" in hangup_source or "callee" in hangup_source:
             hangup_by = "guest"
         elif "agent" in hangup_source or "bot" in hangup_source:
             hangup_by = "agent"
@@ -221,7 +258,7 @@ class WebhookService:
             "hangup": {
                 "source": hangup_source,
                 "by": hangup_by,
-                "cause": raw_status or "completed",
+                "cause": hangup_cause_label,
             },
             "metrics": {
                 "duration_seconds": effective_duration,

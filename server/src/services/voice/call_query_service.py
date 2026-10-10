@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from src.db.connection import mongodb
 from bson.json_util import dumps
@@ -50,9 +50,15 @@ class CallQueryService:
             if doc.get("knowledge_base_id"):
                 doc["knowledge_base_id"] = str(doc["knowledge_base_id"])
             if isinstance(doc.get("created_at"), datetime):
-                doc["created_at"] = doc["created_at"].isoformat()
+                dt = doc["created_at"]
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                doc["created_at"] = dt.isoformat()
             if isinstance(doc.get("updated_at"), datetime):
-                doc["updated_at"] = doc["updated_at"].isoformat()
+                dt = doc["updated_at"]
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                doc["updated_at"] = dt.isoformat()
             calls.append(doc)
 
         return {
@@ -86,9 +92,15 @@ class CallQueryService:
         if call.get("knowledge_base_id"):
             call["knowledge_base_id"] = str(call["knowledge_base_id"])
         if isinstance(call.get("created_at"), datetime):
-            call["created_at"] = call["created_at"].isoformat()
+            dt = call["created_at"]
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            call["created_at"] = dt.isoformat()
         if isinstance(call.get("updated_at"), datetime):
-            call["updated_at"] = call["updated_at"].isoformat()
+            dt = call["updated_at"]
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            call["updated_at"] = dt.isoformat()
 
         return call
 

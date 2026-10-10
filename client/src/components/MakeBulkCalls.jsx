@@ -37,6 +37,9 @@ export default function MakeBulkCalls() {
   const [rateLimitSecond, setRateLimitSecond] = useState(2.0);
 
   const [parsedContacts, setParsedContacts] = useState([]);
+  const [batchId, setBatchId] = useState(null);
+  const [queueStatus, setQueueStatus] = useState("idle"); // 'idle' | 'running' | 'paused' | 'stopped'
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -62,6 +65,45 @@ export default function MakeBulkCalls() {
     };
   }, [BASE_URL]);
 
+  // Poll Batch Job Progress & Live Contact Statuses
+  useEffect(() => {
+    if (!batchId || (queueStatus !== "running" && queueStatus !== "paused")) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const { data } = await axios.get(`${BASE_URL}/api/v1/voice/batch/${batchId}`);
+        if (data?.data) {
+          const batchJob = data.data;
+          if (batchJob.status === "completed" || batchJob.status === "stopped") {
+            setQueueStatus(batchJob.status);
+          }
+
+          if (batchJob.contacts_summary?.length > 0) {
+            const summaryMap = {};
+            batchJob.contacts_summary.forEach((item) => {
+              const cleanNum = String(item.to_number || "").replace(/\D/g, "");
+              summaryMap[cleanNum] = item.status;
+            });
+
+            setParsedContacts((prev) =>
+              prev.map((c) => {
+                const cClean = String(c.to_number || "").replace(/\D/g, "");
+                return {
+                  ...c,
+                  status: summaryMap[cClean] || c.status,
+                };
+              })
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Error polling batch status:", err);
+      }
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [batchId, queueStatus, BASE_URL]);
+
   const handleFileSelect = (file) => {
     if (!file) {
       setParsedContacts([]);
@@ -85,10 +127,6 @@ export default function MakeBulkCalls() {
     };
     reader.readAsBinaryString(file);
   };
-
-  const [batchId, setBatchId] = useState(null);
-  const [queueStatus, setQueueStatus] = useState("idle"); // 'idle' | 'running' | 'paused' | 'stopped'
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // 1. Initiate Bulk Calls
   const handleInitiate = async (e) => {
