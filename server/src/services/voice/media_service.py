@@ -205,6 +205,8 @@ Output ONLY valid JSON."""
             )
 
             update_set = {
+                "call_status": "answered",
+                "disposition": "completed",
                 "media.recording_id": recording_id,
                 "media.audio_format": "mp3",
                 "ai_insights.conversation_turns": conversation_turns,

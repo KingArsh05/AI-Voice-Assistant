@@ -3,6 +3,8 @@ import logging
 import math
 import re
 import threading
+import base64
+import urllib.request
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -115,7 +117,9 @@ class WebhookService:
             if to_num:
                 query = {"telephony.to_number": str(to_num), "call_status": "initiated"}
             else:
-                logger.warning("Hangup event received without identifier: %s", event_data)
+                logger.warning(
+                    "Hangup event received without identifier: %s", event_data
+                )
                 return
         else:
             query = {"$or": query_or}
@@ -366,12 +370,49 @@ class WebhookService:
             )
 
         update_set = {
+            "call_status": "answered",
+            "disposition": "completed",
             "media.recording_id": rec_id,
             "media.audio_format": "mp3",
             "ai_insights.summary": summary or "",
             "ai_insights.conversation_turns": conversation_turns,
             "updated_at": datetime.now(timezone.utc),
         }
+
+        # Self-heal call_uuid, duration, and pricing if hangup webhook was missed
+        if rec_id:
+            try:
+                credentials = base64.b64encode(
+                    f"{Config.PLIVO_AUTH_ID}:{Config.PLIVO_AUTH_TOKEN}".encode("utf-8")
+                ).decode("utf-8")
+                rec_meta_url = f"https://api.plivo.com/v1/Account/{Config.PLIVO_AUTH_ID}/Recording/{rec_id}/"
+                meta_req = urllib.request.Request(
+                    rec_meta_url,
+                    headers={"Authorization": f"Basic {credentials}", "Accept": "application/json"},
+                )
+                with urllib.request.urlopen(meta_req, timeout=5) as meta_resp:
+                    meta_data = json.loads(meta_resp.read().decode("utf-8")) if meta_resp else {}
+                    plivo_call_uuid = meta_data.get("call_uuid")
+                    dur_ms = meta_data.get("recording_duration_ms") or 0
+                    rec_dur_sec = int(float(dur_ms) / 1000.0) if dur_ms else 0
+
+                    if plivo_call_uuid:
+                        update_set["identifiers.call_uuid"] = str(plivo_call_uuid)
+                    if rec_dur_sec > 0:
+                        billed_min = math.ceil(rec_dur_sec / 60.0)
+                        update_set["metrics.duration_seconds"] = rec_dur_sec
+                        update_set["metrics.billed_minutes"] = billed_min
+                        update_set["pricing.telecom_cost"] = round(billed_min * 1.80, 2)
+                        update_set["pricing.ai_engine_cost"] = round(billed_min * 1.48, 2)
+                        update_set["pricing.regulatory_overhead"] = round(billed_min * 0.10, 2)
+                        update_set["pricing.total_cost"] = round(billed_min * 3.38, 2)
+                        update_set["pricing.breakdown_explanation"] = (
+                            f"{billed_min} billed mins @ ₹3.38/min (₹1.80 telecom + ₹1.48 AI engine + ₹0.10 carrier/noise cancel)"
+                        )
+                        update_set["hangup.cause"] = "Normal Hangup"
+                        update_set["hangup.by"] = "guest"
+            except Exception as meta_err:
+                logger.warning("Could not self-heal metrics from recording API for %s: %s", rec_id, meta_err)
 
         if event_data.get("cost") is not None:
             try:
