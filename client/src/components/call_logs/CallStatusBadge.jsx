@@ -1,8 +1,19 @@
-import React from "react";
 import { CheckCircle2, PhoneMissed, Clock, AlertCircle } from "lucide-react";
 
-export function CallStatusBadge({ status }) {
-  const norm = (status || "").toLowerCase();
+export function CallStatusBadge({ status, call }) {
+  let norm = (status || "").toLowerCase();
+
+  // If status is still 'pending' or 'initiated', but recording or transcript exists, treat as completed
+  const hasRecording = Boolean(call?.media?.recording_id || call?.recording_url);
+  const hasTurns = Boolean(call?.ai_insights?.conversation_turns?.length > 0);
+  const hasDuration = (call?.metrics?.duration_seconds || 0) > 0;
+
+  if (
+    (norm === "pending" || norm === "initiated" || !norm) &&
+    (hasRecording || hasTurns || hasDuration)
+  ) {
+    norm = "completed";
+  }
 
   if (norm === "answered" || norm === "completed") {
     return (

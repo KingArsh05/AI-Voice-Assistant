@@ -20,6 +20,7 @@ import CRMIntentBadge from "./CRMIntentBadge";
 import CRMLeadDrawer from "./CRMLeadDrawer";
 import CRMCallModal from "./CRMCallModal";
 import CRMBulkCallModal from "./CRMBulkCallModal";
+import { CampaignModal } from "../campaigns";
 
 export default function CRMData() {
   const BASE_URL = import.meta.env.VITE_BASE_URL;
@@ -45,6 +46,7 @@ export default function CRMData() {
   // Row selection state for bulk actions
   const [selectedLeadIds, setSelectedLeadIds] = useState(new Set());
   const [isBulkCallModalOpen, setIsBulkCallModalOpen] = useState(false);
+  const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
 
   const totalPages = Math.ceil(total / limit) || 1;
 
@@ -437,17 +439,15 @@ export default function CRMData() {
               <span>Initiate Bulk Call ({selectedLeadIds.size})</span>
             </button>
 
-            {/* Feature 2: Run Campaign (UI ready) */}
+            {/* Feature 2: Run Campaign */}
             <button
               type="button"
-              onClick={() => {
-                alert(`Run Campaign for ${selectedLeadIds.size} selected leads is coming in next phase!`);
-              }}
+              onClick={() => setIsCampaignModalOpen(true)}
               className="h-8.5 px-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white text-xs font-medium flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
-              title="Feature 2: Run Campaign for selected leads"
+              title="Launch voice campaign for selected leads"
             >
               <Megaphone className="w-3.5 h-3.5 text-violet-400" />
-              <span>Run Campaign</span>
+              <span>Run Campaign ({selectedLeadIds.size})</span>
             </button>
 
             {/* Clear Selection */}
@@ -751,6 +751,17 @@ export default function CRMData() {
         hotels={hotels}
         onSuccess={() => {
           // Keep selection or notify
+        }}
+      />
+
+      {/* Voice Campaign Modal for Selected CRM Leads */}
+      <CampaignModal
+        isOpen={isCampaignModalOpen}
+        onClose={() => setIsCampaignModalOpen(false)}
+        selectedLeads={selectedLeadsList}
+        hotels={hotels}
+        onSuccess={() => {
+          // Handle successful campaign completion
         }}
       />
     </div>

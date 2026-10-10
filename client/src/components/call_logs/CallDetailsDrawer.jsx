@@ -23,15 +23,21 @@ export default function CallDetailsDrawer({ call, onClose, baseUrl }) {
 
   const turns = call.ai_insights?.conversation_turns || [];
   const recId = call.media?.recording_id;
-  const audioStreamUrl = recId ? `${baseUrl}/api/v1/voice/recordings/${recId}.mp3` : null;
+  const audioStreamUrl = recId
+    ? `${baseUrl}/api/v1/voice/recordings/${recId}.mp3`
+    : null;
   const sentiment = call.ai_insights?.guest_sentiment || "positive";
   const durationSec = call.metrics?.duration_seconds || 0;
 
   // First user turn as snippet quote like Pic 3
-  const firstUserTurn = turns.find((t) => t.speaker?.toLowerCase() === "user")?.text || call.ai_insights?.summary;
+  const firstUserTurn =
+    turns.find((t) => t.speaker?.toLowerCase() === "user")?.text ||
+    call.ai_insights?.summary;
 
   const copyTranscriptText = () => {
-    const text = turns.map((t) => `[${t.speaker.toUpperCase()}]: ${t.text}`).join("\n\n");
+    const text = turns
+      .map((t) => `[${t.speaker.toUpperCase()}]: ${t.text}`)
+      .join("\n\n");
     navigator.clipboard.writeText(text);
     setCopiedTranscript(true);
     setTimeout(() => setCopiedTranscript(false), 2000);
@@ -73,7 +79,10 @@ export default function CallDetailsDrawer({ call, onClose, baseUrl }) {
               <h2 className="text-base font-bold text-white">
                 {call.party_details?.guest_name || "Guest Call"}
               </h2>
-              <CallStatusBadge status={call.disposition || call.call_status} />
+              <CallStatusBadge
+                status={call.disposition || call.call_status}
+                call={call}
+              />
             </div>
             <div className="flex items-center gap-2.5 text-xs text-slate-400 mt-1">
               <span className="flex items-center gap-1 font-mono text-slate-300">
@@ -119,7 +128,9 @@ export default function CallDetailsDrawer({ call, onClose, baseUrl }) {
         {/* Call Meta 4-Column Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           <div className="p-3 bg-slate-950/60 border border-slate-800/90 rounded-xl">
-            <span className="text-[11px] text-slate-400 block mb-1">Duration</span>
+            <span className="text-[11px] text-slate-400 block mb-1">
+              Duration
+            </span>
             <span className="text-xs font-bold text-slate-100 flex items-center gap-1 font-mono">
               <Clock className="w-3 h-3 text-violet-400" />
               {formatDuration(durationSec)}
@@ -127,7 +138,9 @@ export default function CallDetailsDrawer({ call, onClose, baseUrl }) {
           </div>
 
           <div className="p-3 bg-slate-950/60 border border-slate-800/90 rounded-xl">
-            <span className="text-[11px] text-slate-400 block mb-1">Total Cost</span>
+            <span className="text-[11px] text-slate-400 block mb-1">
+              Total Cost
+            </span>
             <span className="text-xs font-bold text-emerald-400 flex items-center gap-1 font-mono">
               <IndianRupee className="w-3 h-3" />
               {call.pricing?.total_cost ? `₹${call.pricing.total_cost}` : "—"}
@@ -135,7 +148,9 @@ export default function CallDetailsDrawer({ call, onClose, baseUrl }) {
           </div>
 
           <div className="p-3 bg-slate-950/60 border border-slate-800/90 rounded-xl">
-            <span className="text-[11px] text-slate-400 block mb-1">Direction</span>
+            <span className="text-[11px] text-slate-400 block mb-1">
+              Direction
+            </span>
             <span className="text-xs font-bold text-sky-400 uppercase tracking-wider font-mono">
               {call.telephony?.direction || "outbound"}
             </span>
@@ -275,7 +290,11 @@ export default function CallDetailsDrawer({ call, onClose, baseUrl }) {
                       }`}
                     >
                       <div className="text-[10px] font-semibold text-slate-400 mb-1 flex items-center gap-2">
-                        <span>{isAgent ? "StayChat AI Voice Agent" : call.party_details?.guest_name || "Guest"}</span>
+                        <span>
+                          {isAgent
+                            ? "StayChat AI Voice Agent"
+                            : call.party_details?.guest_name || "Guest"}
+                        </span>
                         <span>• #{turn.turn_index || i + 1}</span>
                       </div>
                       <p>{turn.text}</p>

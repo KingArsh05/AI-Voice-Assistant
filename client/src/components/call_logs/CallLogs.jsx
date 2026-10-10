@@ -135,11 +135,11 @@ export default function CallLogs() {
   // KPI calculations
   const stats = useMemo(() => {
     const answeredCount = calls.filter(
-      (c) => c.call_status === "answered" || c.disposition === "completed"
+      (c) => c.call_status === "answered" || c.disposition === "completed",
     ).length;
     const totalDuration = calls.reduce(
       (acc, c) => acc + (c.metrics?.duration_seconds || 0),
-      0
+      0,
     );
     const avgSec = calls.length ? Math.round(totalDuration / calls.length) : 0;
     const avgM = Math.floor(avgSec / 60);
@@ -187,7 +187,8 @@ export default function CallLogs() {
               AI Call Logs & Analytics
             </h1>
             <p className="text-xs text-slate-400 mt-1">
-              Inspect live & past outbound AI voice conversations with full transcripts and recording playback.
+              Inspect live & past outbound AI voice conversations with full
+              transcripts and recording playback.
             </p>
           </div>
 
@@ -197,7 +198,9 @@ export default function CallLogs() {
             disabled={isLoading}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 text-xs transition-all cursor-pointer shadow-sm active:scale-95"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-indigo-400" : ""}`} />
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-indigo-400" : ""}`}
+            />
             <span>Refresh</span>
           </button>
         </div>
@@ -209,8 +212,12 @@ export default function CallLogs() {
               <PhoneCall className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[11px] text-slate-400 block">Total Recorded</span>
-              <span className="text-base font-bold text-white font-mono">{total}</span>
+              <span className="text-[11px] text-slate-400 block">
+                Total Recorded
+              </span>
+              <span className="text-base font-bold text-white font-mono">
+                {total}
+              </span>
             </div>
           </div>
 
@@ -219,9 +226,13 @@ export default function CallLogs() {
               <CheckCircle2 className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[11px] text-slate-400 block">Answered Rate</span>
+              <span className="text-[11px] text-slate-400 block">
+                Answered Rate
+              </span>
               <span className="text-base font-bold text-emerald-400 font-mono">
-                {total > 0 ? `${Math.round((stats.answeredCount / (calls.length || 1)) * 100)}%` : "100%"}
+                {total > 0
+                  ? `${Math.round((stats.answeredCount / (calls.length || 1)) * 100)}%`
+                  : "100%"}
               </span>
             </div>
           </div>
@@ -231,8 +242,12 @@ export default function CallLogs() {
               <Clock className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[11px] text-slate-400 block">Avg Duration</span>
-              <span className="text-base font-bold text-slate-200 font-mono">{stats.avgDuration}</span>
+              <span className="text-[11px] text-slate-400 block">
+                Avg Duration
+              </span>
+              <span className="text-base font-bold text-slate-200 font-mono">
+                {stats.avgDuration}
+              </span>
             </div>
           </div>
 
@@ -241,8 +256,12 @@ export default function CallLogs() {
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[11px] text-slate-400 block">AI Resolution</span>
-              <span className="text-base font-bold text-amber-300 font-mono">Automated</span>
+              <span className="text-[11px] text-slate-400 block">
+                AI Resolution
+              </span>
+              <span className="text-base font-bold text-amber-300 font-mono">
+                Automated
+              </span>
             </div>
           </div>
         </div>
@@ -290,7 +309,9 @@ export default function CallLogs() {
 
         {/* Counter readout */}
         <div className="text-xs text-slate-400 font-mono">
-          Showing <span className="text-white font-bold">{filteredCalls.length}</span> of {total} calls
+          Showing{" "}
+          <span className="text-white font-bold">{filteredCalls.length}</span>{" "}
+          of {total} calls
         </div>
       </div>
 
@@ -407,13 +428,18 @@ export default function CallLogs() {
                       <td className="py-3 px-3 whitespace-nowrap font-mono text-slate-300">
                         <div className="flex items-center gap-1">
                           <Clock className="w-3 h-3 text-slate-400" />
-                          <span>{formatDuration(call.metrics?.duration_seconds)}</span>
+                          <span>
+                            {formatDuration(call.metrics?.duration_seconds)}
+                          </span>
                         </div>
                       </td>
 
                       {/* Status */}
                       <td className="py-3 px-3 whitespace-nowrap">
-                        <CallStatusBadge status={call.disposition || call.call_status} />
+                        <CallStatusBadge
+                          status={call.disposition || call.call_status}
+                          call={call}
+                        />
                       </td>
 
                       {/* AI Summary */}
@@ -428,7 +454,9 @@ export default function CallLogs() {
 
                       {/* Cost */}
                       <td className="py-3 px-3 whitespace-nowrap font-mono text-emerald-400">
-                        {call.pricing?.total_cost ? `₹${call.pricing.total_cost}` : "—"}
+                        {call.pricing?.total_cost
+                          ? `₹${call.pricing.total_cost}`
+                          : "—"}
                       </td>
 
                       {/* Time */}
@@ -440,7 +468,10 @@ export default function CallLogs() {
                       <td className="py-3 px-3 text-right">
                         <div className="flex items-center justify-end gap-1.5 text-slate-400 group-hover:text-violet-400">
                           {hasRecording && (
-                            <Volume2 className="w-3.5 h-3.5 text-violet-400" title="Recording available" />
+                            <Volume2
+                              className="w-3.5 h-3.5 text-violet-400"
+                              title="Recording available"
+                            />
                           )}
                           <ChevronRightIcon className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
                         </div>
